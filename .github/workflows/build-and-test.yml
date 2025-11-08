@@ -69,7 +69,7 @@ jobs:
 
     - name: Configure CMake
       run: |
-        cmake --preset conan-release
+        cmake --preset conan-default
 
     - name: Build (Unix)
       if: runner.os != 'Windows'

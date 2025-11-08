@@ -142,7 +142,7 @@ namespace quiverdb {
 
 #ifdef QUIVER_ARM_NEON
   return l2_sq_neon(a, b, dim);
-#elif QUIVER_AVX2
+#elif defined(QUIVER_AVX2)
   return l2_sq_avx2(a, b, dim);
 #else
   return l2_sq_scalar(a, b, dim);

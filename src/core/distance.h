@@ -10,13 +10,20 @@
 #define QUIVER_AVX2
 #endif
 
+// Compiler-specific restrict keyword
+#if defined(_MSC_VER)
+#define QUIVER_RESTRICT __restrict
+#else
+#define QUIVER_RESTRICT __restrict__
+#endif
+
 namespace quiverdb {
 
 // ============================================================================
 // Scalar Implementation
 // ============================================================================
 
-[[nodiscard]] inline float l2_sq_scalar(const float* __restrict__ a, const float* __restrict__ b, size_t dim) noexcept {
+[[nodiscard]] inline float l2_sq_scalar(const float* QUIVER_RESTRICT a, const float* QUIVER_RESTRICT b, size_t dim) noexcept {
   assert(a != nullptr && "Vector a must not be null");
   assert(b != nullptr && "Vector b must not be null");
 
@@ -38,7 +45,7 @@ namespace quiverdb {
 // ============================================================================
 
 #ifdef QUIVER_ARM_NEON
-[[nodiscard]] inline float l2_sq_neon(const float* __restrict__ a, const float* __restrict__ b, size_t dim) noexcept {
+[[nodiscard]] inline float l2_sq_neon(const float* QUIVER_RESTRICT a, const float* QUIVER_RESTRICT b, size_t dim) noexcept {
   assert(a != nullptr && "Vector a must not be null");
   assert(b != nullptr && "Vector b must not be null");
 
@@ -71,7 +78,7 @@ namespace quiverdb {
 // ============================================================================
 
 #ifdef QUIVER_AVX2
-[[nodiscard]] inline float l2_sq_avx2(const float* __restrict__ a, const float* __restrict__ b, size_t dim) noexcept {
+[[nodiscard]] inline float l2_sq_avx2(const float* QUIVER_RESTRICT a, const float* QUIVER_RESTRICT b, size_t dim) noexcept {
   assert(a != nullptr && "Vector a must not be null");
   assert(b != nullptr && "Vector b must not be null");
 
@@ -132,7 +139,7 @@ namespace quiverdb {
  *
  * @note For actual Euclidean distance, take sqrt() of the result.
  */
-[[nodiscard]] inline float l2_sq(const float* __restrict__ a, const float* __restrict__ b, size_t dim) noexcept {
+[[nodiscard]] inline float l2_sq(const float* QUIVER_RESTRICT a, const float* QUIVER_RESTRICT b, size_t dim) noexcept {
   assert(a != nullptr && "Vector a must not be null");
   assert(b != nullptr && "Vector b must not be null");
 

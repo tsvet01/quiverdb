@@ -45,7 +45,7 @@ jobs:
     - name: Create Conan profile
       run: |
         conan profile detect --force
-        conan profile show default
+        conan profile show
 
     - name: Install dependencies
       run: |

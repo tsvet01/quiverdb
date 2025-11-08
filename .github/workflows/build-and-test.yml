@@ -85,7 +85,7 @@ jobs:
     - name: Build (Windows)
       if: runner.os == 'Windows'
       run: |
-        cmake --build build/Release --config Release -j $env:NUMBER_OF_PROCESSORS
+        cmake --build build --config Release -j $env:NUMBER_OF_PROCESSORS
 
     - name: Run tests (Unix)
       if: runner.os != 'Windows'

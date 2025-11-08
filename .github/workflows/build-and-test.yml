@@ -67,7 +67,13 @@ jobs:
       run: |
         conan install . --build=missing -s build_type=${{ matrix.build_type }} -s compiler.cppstd=20
 
-    - name: Configure CMake
+    - name: Configure CMake (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        cmake --preset conan-release
+
+    - name: Configure CMake (Windows)
+      if: runner.os == 'Windows'
       run: |
         cmake --preset conan-default
 

@@ -11,16 +11,19 @@ Embeddable vector database for edge AI. Lightning-fast semantic search that runs
 
 ## Quick Start
 ```cpp
-#include "quiverdb.h"
+#include "core/distance.h"
 
-quiverdb::Index index(768);  // 768-dimensional vectors
-index.add(vector_id, embedding);
-auto results = index.search(query, k=10);
+// 768-dimensional vectors (e.g., OpenAI embeddings)
+float vec_a[768] = {/* ... */};
+float vec_b[768] = {/* ... */};
+
+// Compute L2 squared distance (auto-selects SIMD implementation)
+float distance = quiverdb::l2_sq(vec_a, vec_b, 768);
 ```
 
 ## Building and Running
 Prerequisites
-- CMake 4.1+
+- CMake 3.20+
 - Conan 2.0+
 - C++20 compiler (Clang 17+ / GCC 11+ / MSVC 19.30+)
 
@@ -29,11 +32,10 @@ Prerequisites
 conan profile detect --force
 
 # Build
-conan install . --build=missing -s build_type=Release
+conan install . --build=missing -s build_type=Release -s compiler.cppstd=20
 cmake --preset conan-release
 cmake --build build/Release
 
-### Run
 # Run tests
 ./build/Release/test_distance
 

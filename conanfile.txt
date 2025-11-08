@@ -1,0 +1,10 @@
+[requires]
+catch2/3.11.0
+benchmark/1.9.4
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout

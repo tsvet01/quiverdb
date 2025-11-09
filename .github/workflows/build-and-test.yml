@@ -1,0 +1,117 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop, "claude/**" ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.os }} - ${{ matrix.compiler }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux - GCC
+          - os: ubuntu-latest
+            compiler: gcc
+            build_type: Release
+          # Linux - Clang
+          - os: ubuntu-latest
+            compiler: clang
+            build_type: Release
+          # macOS - Apple Clang (tests ARM NEON on M-series)
+          - os: macos-latest
+            compiler: clang
+            build_type: Release
+          # Windows - MSVC (tests AVX2 on x64)
+          - os: windows-latest
+            compiler: msvc
+            build_type: Release
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install Conan
+      run: |
+        pip install conan
+        conan --version
+
+    - name: Set up compiler (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        if [ "${{ matrix.compiler }}" = "gcc" ]; then
+          echo "CC=gcc" >> $GITHUB_ENV
+          echo "CXX=g++" >> $GITHUB_ENV
+        else
+          echo "CC=clang" >> $GITHUB_ENV
+          echo "CXX=clang++" >> $GITHUB_ENV
+        fi
+
+    - name: Create Conan profile
+      run: |
+        conan profile detect --force
+        conan profile show
+
+    - name: Install dependencies
+      run: |
+        conan install . --build=missing -s build_type=${{ matrix.build_type }} -s compiler.cppstd=20
+
+    - name: Configure CMake (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        cmake --preset conan-release
+
+    - name: Configure CMake (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        cmake --preset conan-default
+
+    - name: Build (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        cmake --build build/Release -j $(nproc 2>/dev/null || sysctl -n hw.ncpu)
+
+    - name: Build (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        cmake --build build --config Release -j $env:NUMBER_OF_PROCESSORS
+
+    - name: Run tests (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        ./build/Release/test_distance
+
+    - name: Run tests (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        .\build\Release\test_distance.exe
+
+    - name: Run benchmarks (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        ./build/Release/bench_distance --benchmark_min_time=0.1s
+
+    - name: Run benchmarks (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        .\build\Release\bench_distance.exe --benchmark_min_time=0.1s
+
+    - name: Upload benchmark results
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results-${{ matrix.os }}-${{ matrix.compiler }}
+        path: |
+          build/Release/bench_distance*
+        retention-days: 7

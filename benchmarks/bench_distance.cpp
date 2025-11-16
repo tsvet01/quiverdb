@@ -101,4 +101,200 @@ BENCHMARK(BM_L2_API)
     ->Arg(768)
     ->Arg(1536);
 
+// ============================================================================
+// Dot Product Benchmarks
+// ============================================================================
+
+static void BM_DotProduct_Scalar(benchmark::State &state) {
+  const size_t dim = state.range(0);
+  std::vector<float> a(dim);
+  std::vector<float> b(dim);
+
+  std::mt19937 gen(42);
+  std::uniform_real_distribution<float> dis(0.0f, 1.0f);
+
+  for (size_t i = 0; i < dim; ++i) {
+    a[i] = dis(gen);
+    b[i] = dis(gen);
+  }
+
+  for (auto _ : state) {
+    float result = quiverdb::dot_product_scalar(a.data(), b.data(), dim);
+    benchmark::DoNotOptimize(result);
+  }
+
+  state.SetItemsProcessed(state.iterations() * dim);
+  state.SetBytesProcessed(state.iterations() * dim * sizeof(float) * 2);
+}
+
+#ifdef QUIVER_ARM_NEON
+static void BM_DotProduct_NEON(benchmark::State &state) {
+  const size_t dim = state.range(0);
+  std::vector<float> a(dim);
+  std::vector<float> b(dim);
+
+  std::mt19937 gen(42);
+  std::uniform_real_distribution<float> dis(0.0f, 1.0f);
+
+  for (size_t i = 0; i < dim; ++i) {
+    a[i] = dis(gen);
+    b[i] = dis(gen);
+  }
+
+  for (auto _ : state) {
+    float result = quiverdb::dot_product_neon(a.data(), b.data(), dim);
+    benchmark::DoNotOptimize(result);
+  }
+
+  state.SetItemsProcessed(state.iterations() * dim);
+  state.SetBytesProcessed(state.iterations() * dim * sizeof(float) * 2);
+}
+#endif
+
+static void BM_DotProduct_API(benchmark::State &state) {
+  const size_t dim = state.range(0);
+  std::vector<float> a(dim);
+  std::vector<float> b(dim);
+
+  std::mt19937 gen(42);
+  std::uniform_real_distribution<float> dis(0.0f, 1.0f);
+
+  for (size_t i = 0; i < dim; ++i) {
+    a[i] = dis(gen);
+    b[i] = dis(gen);
+  }
+
+  for (auto _ : state) {
+    float result = quiverdb::dot_product(a.data(), b.data(), dim);
+    benchmark::DoNotOptimize(result);
+  }
+
+  state.SetItemsProcessed(state.iterations() * dim);
+  state.SetBytesProcessed(state.iterations() * dim * sizeof(float) * 2);
+}
+
+BENCHMARK(BM_DotProduct_Scalar)
+    ->Arg(128)
+    ->Arg(256)
+    ->Arg(384)
+    ->Arg(512)
+    ->Arg(768)
+    ->Arg(1536);
+
+#ifdef QUIVER_ARM_NEON
+BENCHMARK(BM_DotProduct_NEON)
+    ->Arg(128)
+    ->Arg(256)
+    ->Arg(384)
+    ->Arg(512)
+    ->Arg(768)
+    ->Arg(1536);
+#endif
+
+BENCHMARK(BM_DotProduct_API)
+    ->Arg(128)
+    ->Arg(256)
+    ->Arg(384)
+    ->Arg(512)
+    ->Arg(768)
+    ->Arg(1536);
+
+// ============================================================================
+// Cosine Distance Benchmarks
+// ============================================================================
+
+static void BM_Cosine_Scalar(benchmark::State &state) {
+  const size_t dim = state.range(0);
+  std::vector<float> a(dim);
+  std::vector<float> b(dim);
+
+  std::mt19937 gen(42);
+  std::uniform_real_distribution<float> dis(0.0f, 1.0f);
+
+  for (size_t i = 0; i < dim; ++i) {
+    a[i] = dis(gen);
+    b[i] = dis(gen);
+  }
+
+  for (auto _ : state) {
+    float result = quiverdb::cosine_distance_scalar(a.data(), b.data(), dim);
+    benchmark::DoNotOptimize(result);
+  }
+
+  state.SetItemsProcessed(state.iterations() * dim);
+  state.SetBytesProcessed(state.iterations() * dim * sizeof(float) * 2);
+}
+
+#ifdef QUIVER_ARM_NEON
+static void BM_Cosine_NEON(benchmark::State &state) {
+  const size_t dim = state.range(0);
+  std::vector<float> a(dim);
+  std::vector<float> b(dim);
+
+  std::mt19937 gen(42);
+  std::uniform_real_distribution<float> dis(0.0f, 1.0f);
+
+  for (size_t i = 0; i < dim; ++i) {
+    a[i] = dis(gen);
+    b[i] = dis(gen);
+  }
+
+  for (auto _ : state) {
+    float result = quiverdb::cosine_distance_neon(a.data(), b.data(), dim);
+    benchmark::DoNotOptimize(result);
+  }
+
+  state.SetItemsProcessed(state.iterations() * dim);
+  state.SetBytesProcessed(state.iterations() * dim * sizeof(float) * 2);
+}
+#endif
+
+static void BM_Cosine_API(benchmark::State &state) {
+  const size_t dim = state.range(0);
+  std::vector<float> a(dim);
+  std::vector<float> b(dim);
+
+  std::mt19937 gen(42);
+  std::uniform_real_distribution<float> dis(0.0f, 1.0f);
+
+  for (size_t i = 0; i < dim; ++i) {
+    a[i] = dis(gen);
+    b[i] = dis(gen);
+  }
+
+  for (auto _ : state) {
+    float result = quiverdb::cosine_distance(a.data(), b.data(), dim);
+    benchmark::DoNotOptimize(result);
+  }
+
+  state.SetItemsProcessed(state.iterations() * dim);
+  state.SetBytesProcessed(state.iterations() * dim * sizeof(float) * 2);
+}
+
+BENCHMARK(BM_Cosine_Scalar)
+    ->Arg(128)
+    ->Arg(256)
+    ->Arg(384)
+    ->Arg(512)
+    ->Arg(768)
+    ->Arg(1536);
+
+#ifdef QUIVER_ARM_NEON
+BENCHMARK(BM_Cosine_NEON)
+    ->Arg(128)
+    ->Arg(256)
+    ->Arg(384)
+    ->Arg(512)
+    ->Arg(768)
+    ->Arg(1536);
+#endif
+
+BENCHMARK(BM_Cosine_API)
+    ->Arg(128)
+    ->Arg(256)
+    ->Arg(384)
+    ->Arg(512)
+    ->Arg(768)
+    ->Arg(1536);
+
 BENCHMARK_MAIN();

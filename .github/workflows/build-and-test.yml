@@ -36,16 +36,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-
-    - name: Install Conan
-      run: |
-        pip install conan
-        conan --version
-
     - name: Set up compiler (Unix)
       if: runner.os != 'Windows'
       shell: bash
@@ -58,60 +48,28 @@ jobs:
           echo "CXX=clang++" >> $GITHUB_ENV
         fi
 
-    - name: Create Conan profile
+    - name: Configure CMake
       run: |
-        conan profile detect --force
-        conan profile show
+        cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
-    - name: Install dependencies
+    - name: Build
       run: |
-        conan install . --build=missing -s build_type=${{ matrix.build_type }} -s compiler.cppstd=20
+        cmake --build build --config ${{ matrix.build_type }} --parallel
 
-    - name: Configure CMake (Unix)
-      if: runner.os != 'Windows'
+    - name: Run tests
       run: |
-        cmake --preset conan-release
-
-    - name: Configure CMake (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        cmake --preset conan-default
-
-    - name: Build (Unix)
-      if: runner.os != 'Windows'
-      run: |
-        cmake --build build/Release -j $(nproc 2>/dev/null || sysctl -n hw.ncpu)
-
-    - name: Build (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        cmake --build build --config Release -j $env:NUMBER_OF_PROCESSORS
-
-    - name: Run tests (Unix)
-      if: runner.os != 'Windows'
-      run: |
-        ./build/Release/test_distance
-
-    - name: Run tests (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        .\build\Release\test_distance.exe
+        cd build && ctest --output-on-failure --build-config ${{ matrix.build_type }}
 
     - name: Run benchmarks (Unix)
       if: runner.os != 'Windows'
       run: |
-        ./build/Release/bench_distance --benchmark_min_time=0.1s
+        cd build
+        ./bench_distance --benchmark_min_time=0.05s --benchmark_filter=API/768
+        ./bench_vector_store --benchmark_min_time=0.05s --benchmark_filter=Search_L2/100
 
     - name: Run benchmarks (Windows)
       if: runner.os == 'Windows'
       run: |
-        .\build\Release\bench_distance.exe --benchmark_min_time=0.1s
-
-    - name: Upload benchmark results
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: benchmark-results-${{ matrix.os }}-${{ matrix.compiler }}
-        path: |
-          build/Release/bench_distance*
-        retention-days: 7
+        cd build
+        .\${{ matrix.build_type }}\bench_distance.exe --benchmark_min_time=0.05s --benchmark_filter=API/768
+        .\${{ matrix.build_type }}\bench_vector_store.exe --benchmark_min_time=0.05s --benchmark_filter=Search_L2/100

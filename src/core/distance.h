@@ -1,3 +1,7 @@
+// QuiverDB - Fast vector database for edge AI
+// Copyright (c) 2025 Anton Tsvetkov
+// SPDX-License-Identifier: MIT
+
 #pragma once
 #include <cassert>
 #include <cmath>
@@ -11,6 +15,11 @@
 #define QUIVER_AVX2
 #endif
 
+// FMA detection
+#if defined(__FMA__) && defined(QUIVER_AVX2)
+#define QUIVER_FMA
+#endif
+
 // Compiler-specific restrict keyword
 #if defined(_MSC_VER)
 #define QUIVER_RESTRICT __restrict
@@ -19,6 +28,39 @@
 #endif
 
 namespace quiverdb {
+
+// ============================================================================
+// SIMD Helper Functions
+// ============================================================================
+
+#ifdef QUIVER_ARM_NEON
+// Horizontal sum for NEON - compatible with both ARMv7 and ARMv8
+[[nodiscard]] inline float hsum_f32_neon(float32x4_t v) noexcept {
+#if defined(__aarch64__)
+  // ARMv8: Use vaddvq_f32 (faster single instruction)
+  return vaddvq_f32(v);
+#else
+  // ARMv7: Manual reduction for compatibility
+  float32x2_t sum = vadd_f32(vget_low_f32(v), vget_high_f32(v));
+  sum = vpadd_f32(sum, sum);
+  return vget_lane_f32(sum, 0);
+#endif
+}
+#endif
+
+#ifdef QUIVER_AVX2
+// Horizontal sum for AVX2 - reduces __m256 to single float
+[[nodiscard]] inline float hsum_f32_avx2(__m256 v) noexcept {
+  __m128 low = _mm256_castps256_ps128(v);
+  __m128 high = _mm256_extractf128_ps(v, 1);
+  __m128 sum128 = _mm_add_ps(low, high);
+  __m128 shuf = _mm_movehdup_ps(sum128);
+  __m128 sums = _mm_add_ps(sum128, shuf);
+  shuf = _mm_movehl_ps(shuf, sums);
+  sums = _mm_add_ss(sums, shuf);
+  return _mm_cvtss_f32(sums);
+}
+#endif
 
 // ============================================================================
 // Scalar Implementation
@@ -60,11 +102,10 @@ namespace quiverdb {
     float32x4_t va = vld1q_f32(a + i);
     float32x4_t vb = vld1q_f32(b + i);
     float32x4_t diff = vsubq_f32(va, vb);
-    float32x4_t sq = vmulq_f32(diff, diff);
-    sum_vec = vaddq_f32(sum_vec, sq);
+    sum_vec = vmlaq_f32(sum_vec, diff, diff); // FMA: sum += diff * diff
   }
 
-  float sum = vaddvq_f32(sum_vec);
+  float sum = hsum_f32_neon(sum_vec);
   for (; i < dim; ++i) {
     const float diff = a[i] - b[i];
     sum += diff * diff;
@@ -89,25 +130,18 @@ namespace quiverdb {
 
   __m256 sum_vec = _mm256_setzero_ps();
   size_t i = 0;
-  // Processing 8 floats at a time
   for (; i + 8 <= dim; i += 8) {
     __m256 va = _mm256_loadu_ps(a + i);
     __m256 vb = _mm256_loadu_ps(b + i);
     __m256 diff = _mm256_sub_ps(va, vb);
-    __m256 sq = _mm256_mul_ps(diff, diff);
-    sum_vec = _mm256_add_ps(sum_vec, sq);
+#ifdef QUIVER_FMA
+    sum_vec = _mm256_fmadd_ps(diff, diff, sum_vec); // FMA: sum += diff * diff
+#else
+    sum_vec = _mm256_add_ps(sum_vec, _mm256_mul_ps(diff, diff));
+#endif
   }
 
-  __m128 low = _mm256_castps256_ps128(sum_vec);
-  __m128 high = _mm256_extractf128_ps(sum_vec, 1);
-  __m128 sum128 = _mm_add_ps(low, high);
-
-  __m128 shuf = _mm_movehdup_ps(sum128);
-  __m128 sums = _mm_add_ps(sum128, shuf);
-  shuf = _mm_movehl_ps(shuf, sums);
-  sums = _mm_add_ss(sums, shuf);
-
-  float sum = _mm_cvtss_f32(sums);
+  float sum = hsum_f32_avx2(sum_vec);
   for (; i < dim; ++i) {
     const float diff = a[i] - b[i];
     sum += diff * diff;
@@ -195,11 +229,10 @@ namespace quiverdb {
   for (; i + 4 <= dim; i += 4) {
     float32x4_t va = vld1q_f32(a + i);
     float32x4_t vb = vld1q_f32(b + i);
-    float32x4_t prod = vmulq_f32(va, vb);
-    sum_vec = vaddq_f32(sum_vec, prod);
+    sum_vec = vmlaq_f32(sum_vec, va, vb); // FMA: sum += a * b
   }
 
-  float sum = vaddvq_f32(sum_vec);
+  float sum = hsum_f32_neon(sum_vec);
   for (; i < dim; ++i) {
     sum += a[i] * b[i];
   }
@@ -226,20 +259,14 @@ namespace quiverdb {
   for (; i + 8 <= dim; i += 8) {
     __m256 va = _mm256_loadu_ps(a + i);
     __m256 vb = _mm256_loadu_ps(b + i);
-    __m256 prod = _mm256_mul_ps(va, vb);
-    sum_vec = _mm256_add_ps(sum_vec, prod);
+#ifdef QUIVER_FMA
+    sum_vec = _mm256_fmadd_ps(va, vb, sum_vec); // FMA: sum += a * b
+#else
+    sum_vec = _mm256_add_ps(sum_vec, _mm256_mul_ps(va, vb));
+#endif
   }
 
-  __m128 low = _mm256_castps256_ps128(sum_vec);
-  __m128 high = _mm256_extractf128_ps(sum_vec, 1);
-  __m128 sum128 = _mm_add_ps(low, high);
-
-  __m128 shuf = _mm_movehdup_ps(sum128);
-  __m128 sums = _mm_add_ps(sum128, shuf);
-  shuf = _mm_movehl_ps(shuf, sums);
-  sums = _mm_add_ss(sums, shuf);
-
-  float sum = _mm_cvtss_f32(sums);
+  float sum = hsum_f32_avx2(sum_vec);
   for (; i < dim; ++i) {
     sum += a[i] * b[i];
   }
@@ -344,14 +371,14 @@ namespace quiverdb {
     float32x4_t va = vld1q_f32(a + i);
     float32x4_t vb = vld1q_f32(b + i);
 
-    dot_vec = vaddq_f32(dot_vec, vmulq_f32(va, vb));
-    mag_a_vec = vaddq_f32(mag_a_vec, vmulq_f32(va, va));
-    mag_b_vec = vaddq_f32(mag_b_vec, vmulq_f32(vb, vb));
+    dot_vec = vmlaq_f32(dot_vec, va, vb);        // FMA: dot += a * b
+    mag_a_vec = vmlaq_f32(mag_a_vec, va, va);    // FMA: mag_a += a * a
+    mag_b_vec = vmlaq_f32(mag_b_vec, vb, vb);    // FMA: mag_b += b * b
   }
 
-  float dot = vaddvq_f32(dot_vec);
-  float mag_a = vaddvq_f32(mag_a_vec);
-  float mag_b = vaddvq_f32(mag_b_vec);
+  float dot = hsum_f32_neon(dot_vec);
+  float mag_a = hsum_f32_neon(mag_a_vec);
+  float mag_b = hsum_f32_neon(mag_b_vec);
 
   for (; i < dim; ++i) {
     dot += a[i] * b[i];
@@ -394,42 +421,21 @@ namespace quiverdb {
     __m256 va = _mm256_loadu_ps(a + i);
     __m256 vb = _mm256_loadu_ps(b + i);
 
+#ifdef QUIVER_FMA
+    dot_vec = _mm256_fmadd_ps(va, vb, dot_vec);       // FMA: dot += a * b
+    mag_a_vec = _mm256_fmadd_ps(va, va, mag_a_vec);   // FMA: mag_a += a * a
+    mag_b_vec = _mm256_fmadd_ps(vb, vb, mag_b_vec);   // FMA: mag_b += b * b
+#else
     dot_vec = _mm256_add_ps(dot_vec, _mm256_mul_ps(va, vb));
     mag_a_vec = _mm256_add_ps(mag_a_vec, _mm256_mul_ps(va, va));
     mag_b_vec = _mm256_add_ps(mag_b_vec, _mm256_mul_ps(vb, vb));
+#endif
   }
 
-  // Horizontal sum for dot product
-  __m128 dot_low = _mm256_castps256_ps128(dot_vec);
-  __m128 dot_high = _mm256_extractf128_ps(dot_vec, 1);
-  __m128 dot_sum128 = _mm_add_ps(dot_low, dot_high);
-  __m128 dot_shuf = _mm_movehdup_ps(dot_sum128);
-  __m128 dot_sums = _mm_add_ps(dot_sum128, dot_shuf);
-  dot_shuf = _mm_movehl_ps(dot_shuf, dot_sums);
-  dot_sums = _mm_add_ss(dot_sums, dot_shuf);
-  float dot = _mm_cvtss_f32(dot_sums);
+  float dot = hsum_f32_avx2(dot_vec);
+  float mag_a = hsum_f32_avx2(mag_a_vec);
+  float mag_b = hsum_f32_avx2(mag_b_vec);
 
-  // Horizontal sum for mag_a
-  __m128 mag_a_low = _mm256_castps256_ps128(mag_a_vec);
-  __m128 mag_a_high = _mm256_extractf128_ps(mag_a_vec, 1);
-  __m128 mag_a_sum128 = _mm_add_ps(mag_a_low, mag_a_high);
-  __m128 mag_a_shuf = _mm_movehdup_ps(mag_a_sum128);
-  __m128 mag_a_sums = _mm_add_ps(mag_a_sum128, mag_a_shuf);
-  mag_a_shuf = _mm_movehl_ps(mag_a_shuf, mag_a_sums);
-  mag_a_sums = _mm_add_ss(mag_a_sums, mag_a_shuf);
-  float mag_a = _mm_cvtss_f32(mag_a_sums);
-
-  // Horizontal sum for mag_b
-  __m128 mag_b_low = _mm256_castps256_ps128(mag_b_vec);
-  __m128 mag_b_high = _mm256_extractf128_ps(mag_b_vec, 1);
-  __m128 mag_b_sum128 = _mm_add_ps(mag_b_low, mag_b_high);
-  __m128 mag_b_shuf = _mm_movehdup_ps(mag_b_sum128);
-  __m128 mag_b_sums = _mm_add_ps(mag_b_sum128, mag_b_shuf);
-  mag_b_shuf = _mm_movehl_ps(mag_b_shuf, mag_b_sums);
-  mag_b_sums = _mm_add_ss(mag_b_sums, mag_b_shuf);
-  float mag_b = _mm_cvtss_f32(mag_b_sums);
-
-  // Remainder
   for (; i < dim; ++i) {
     dot += a[i] * b[i];
     mag_a += a[i] * a[i];

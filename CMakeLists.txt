@@ -12,6 +12,11 @@ target_include_directories(quiverdb INTERFACE
     $<INSTALL_INTERFACE:include>
 )
 
+# Options
+option(QUIVERDB_BUILD_TESTS "Build tests" ON)
+option(QUIVERDB_BUILD_BENCHMARKS "Build benchmarks" ON)
+option(QUIVERDB_BUILD_EXAMPLES "Build examples" ON)
+
 # Fetch dependencies
 include(FetchContent)
 
@@ -25,6 +30,7 @@ set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(benchmark)
 
 # Benchmarks
+if(QUIVERDB_BUILD_BENCHMARKS)
 add_executable(bench_distance benchmarks/bench_distance.cpp)
 target_link_libraries(bench_distance PRIVATE quiverdb benchmark::benchmark)
 target_compile_options(bench_distance PRIVATE
@@ -38,8 +44,10 @@ target_compile_options(bench_vector_store PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-march=native -Wall -Wextra -Wpedantic>
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /arch:AVX2>
 )
+endif() # QUIVERDB_BUILD_BENCHMARKS
 
 # Tests - Catch2
+if(QUIVERDB_BUILD_TESTS)
 FetchContent_Declare(
   Catch2
   GIT_REPOSITORY https://github.com/catchorg/Catch2.git
@@ -68,11 +76,18 @@ list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
 catch_discover_tests(test_distance)
 catch_discover_tests(test_vector_store)
+endif() # QUIVERDB_BUILD_TESTS
 
 # Examples
+if(QUIVERDB_BUILD_EXAMPLES)
 add_executable(semantic_search_example examples/semantic_search_example.cpp)
 target_link_libraries(semantic_search_example PRIVATE quiverdb)
 target_compile_options(semantic_search_example PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>
   $<$<CXX_COMPILER_ID:MSVC>:/W4>
 )
+endif() # QUIVERDB_BUILD_EXAMPLES
+
+# Install
+install(DIRECTORY src/core DESTINATION include/quiverdb
+        FILES_MATCHING PATTERN "*.h")

@@ -84,9 +84,9 @@ public:
       throw std::invalid_argument("Vector with ID " + std::to_string(id) + " already exists");
     }
 
-    // Allocate and copy vector data
-    size_t index = vectors_.size();
-    vectors_.push_back(std::vector<float>(vector, vector + dim_));
+    // Append vector data to flat buffer
+    size_t index = ids_.size();
+    vectors_data_.insert(vectors_data_.end(), vector, vector + dim_);
     ids_.push_back(id);
     id_to_index_[id] = index;
   }
@@ -104,16 +104,21 @@ public:
     }
 
     size_t index = it->second;
-    size_t last_index = vectors_.size() - 1;
+    size_t last_index = ids_.size() - 1;
 
-    // Swap with last element and pop
+    // Swap with last vector and pop
     if (index != last_index) {
-      vectors_[index] = std::move(vectors_[last_index]);
+      // Copy last vector's data over the removed vector's data
+      const float* last_vec = vectors_data_.data() + last_index * dim_;
+      float* removed_vec = vectors_data_.data() + index * dim_;
+      std::copy(last_vec, last_vec + dim_, removed_vec);
+
       ids_[index] = ids_[last_index];
       id_to_index_[ids_[index]] = index;
     }
 
-    vectors_.pop_back();
+    // Remove last vector's data
+    vectors_data_.resize(vectors_data_.size() - dim_);
     ids_.pop_back();
     id_to_index_.erase(it);
 
@@ -131,7 +136,7 @@ public:
     if (it == id_to_index_.end()) {
       return nullptr;
     }
-    return vectors_[it->second].data();
+    return vectors_data_.data() + it->second * dim_;
   }
 
   /**
@@ -151,11 +156,13 @@ public:
     }
 
     // Compute all distances
+    size_t num_vectors = ids_.size();
     std::vector<SearchResult> results;
-    results.reserve(vectors_.size());
+    results.reserve(num_vectors);
 
-    for (size_t i = 0; i < vectors_.size(); ++i) {
-      float dist = compute_distance(query, vectors_[i].data());
+    const float* data_ptr = vectors_data_.data();
+    for (size_t i = 0; i < num_vectors; ++i) {
+      float dist = compute_distance(query, data_ptr + i * dim_);
       results.push_back({ids_[i], dist});
     }
 
@@ -174,7 +181,7 @@ public:
    * @brief Returns the number of vectors in the store
    */
   size_t size() const {
-    return vectors_.size();
+    return ids_.size();
   }
 
   /**
@@ -195,7 +202,7 @@ public:
    * @brief Clears all vectors from the store
    */
   void clear() {
-    vectors_.clear();
+    vectors_data_.clear();
     ids_.clear();
     id_to_index_.clear();
   }
@@ -216,7 +223,7 @@ public:
    * @param capacity Number of vectors to reserve space for
    */
   void reserve(size_t capacity) {
-    vectors_.reserve(capacity);
+    vectors_data_.reserve(capacity * dim_);
     ids_.reserve(capacity);
     id_to_index_.reserve(capacity);
   }
@@ -240,7 +247,8 @@ public:
     }
 
     size_t index = it->second;
-    std::copy(vector, vector + dim_, vectors_[index].begin());
+    float* dest = vectors_data_.data() + index * dim_;
+    std::copy(vector, vector + dim_, dest);
     return true;
   }
 
@@ -262,7 +270,7 @@ private:
 
   size_t dim_;
   DistanceMetric metric_;
-  std::vector<std::vector<float>> vectors_;
+  std::vector<float> vectors_data_;  // Flat buffer: [vec0_dim0, vec0_dim1, ..., vec1_dim0, vec1_dim1, ...]
   std::vector<uint64_t> ids_;
   std::unordered_map<uint64_t, size_t> id_to_index_;
 };

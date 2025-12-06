@@ -53,14 +53,57 @@ for (const auto& result : results) {
 }
 ```
 
+### HNSW Index (Approximate Nearest Neighbor)
+For large datasets, use `HNSWIndex` for much faster search:
+
+```cpp
+#include "core/hnsw_index.h"
+
+// Create HNSW index
+quiverdb::HNSWIndex index(768, quiverdb::HNSWDistanceMetric::COSINE, 100000);
+
+// Add vectors
+index.add(1, doc1);
+
+// Search
+auto results = index.search(query, 5);
+
+// Save and Load
+index.save("my_index.bin");
+auto loaded_index = quiverdb::HNSWIndex::load("my_index.bin");
+```
+
+## Python Bindings
+
+QuiverDB includes Python bindings for the HNSW index.
+
+```python
+import quiverdb_py as quiverdb
+import numpy as np
+
+# Create index
+index = quiverdb.HNSWIndex(128, quiverdb.HNSWDistanceMetric.COSINE)
+
+# Add vectors (NumPy arrays)
+vec = np.random.rand(128).astype(np.float32)
+index.add(1, vec)
+
+# Search (returns tuple of numpy arrays: ids, distances)
+ids, dists = index.search(vec, 10)
+
+# Save/Load
+index.save("index.bin")
+```
+
 ## Building and Running
 Prerequisites
 - CMake 3.20+
 - C++20 compiler (Clang 17+ / GCC 11+ / MSVC 19.30+)
+- Python 3.6+ (optional, for bindings)
 - Git (for fetching dependencies)
 
 ```bash
-# Build
+# Build C++ library and Python bindings
 mkdir -p build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . -j
@@ -68,6 +111,7 @@ cmake --build . -j
 # Run tests
 ./test_distance
 ./test_vector_store
+./test_hnsw_index
 
 # Run benchmarks
 ./bench_distance --benchmark_min_time=0.1s

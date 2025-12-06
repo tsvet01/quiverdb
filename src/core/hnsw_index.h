@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <fstream> // Added for file operations
+#include <filesystem> // Added for file operations
 #include <limits>
 #include <mutex>
 #include <queue>
@@ -44,6 +45,13 @@ template <typename T>
 void read_vector(std::ifstream& ifs, std::vector<T>& vec) {
     size_t size;
     read_binary(ifs, size);
+    
+    // Sanity check: Arbitrary limit of 100GB for a single vector to prevent OOM on bad data
+    // Realistically, this depends on T, but 10 billion elements is a safe upper bound for sanity
+    if (size > 10000000000ULL) { 
+        throw std::runtime_error("File corrupted: Vector size too large (" + std::to_string(size) + ")");
+    }
+
     vec.resize(size);
     if (!vec.empty()) {
         ifs.read(reinterpret_cast<char*>(vec.data()), size * sizeof(T));
@@ -412,6 +420,24 @@ public:
     return id_to_internal_.find(id) != id_to_internal_.end();
   }
 
+  /**
+   * @brief Retrieves the vector data for a given ID
+   * 
+   * @param id External ID of the vector to retrieve
+   * @return A copy of the vector data
+   * @throws std::runtime_error if the ID is not found
+   */
+  std::vector<float> get_vector(uint64_t id) const {
+    std::shared_lock<std::shared_mutex> lock(global_mutex_);
+    auto it = id_to_internal_.find(id);
+    if (it == id_to_internal_.end()) {
+        throw std::runtime_error("Vector ID not found: " + std::to_string(id));
+    }
+    size_t internal_id = it->second;
+    const float* data = vectors_.data() + internal_id * dim_;
+    return std::vector<float>(data, data + dim_);
+  }
+
   // --- Serialization ---
   /**
    * @brief Saves the index to a binary file.
@@ -423,55 +449,67 @@ public:
   void save(const std::string& filename) const {
     std::shared_lock<std::shared_mutex> global_lock(global_mutex_); // Use shared_lock for const method
 
-    std::ofstream ofs(filename, std::ios::binary);
+    // Write to a temporary file first
+    std::string temp_filename = filename + ".tmp";
+    std::ofstream ofs(temp_filename, std::ios::binary);
     if (!ofs.is_open()) {
-        throw std::runtime_error("Could not open file for writing: " + filename);
+        throw std::runtime_error("Could not open file for writing: " + temp_filename);
     }
 
-    // Write header (magic number, version, key parameters)
-    const uint32_t magic = 0x51565244; // "QVRD"
-    detail::write_binary(ofs, magic);
-    const uint32_t version = 1;
-    detail::write_binary(ofs, version);
+    try {
+        // Write header (magic number, version, key parameters)
+        const uint32_t magic = 0x51565244; // "QVRD"
+        detail::write_binary(ofs, magic);
+        const uint32_t version = 1;
+        detail::write_binary(ofs, version);
 
-    // Write configuration
-    detail::write_binary(ofs, dim_);
-    detail::write_binary(ofs, metric_);
-    detail::write_binary(ofs, max_elements_);
-    detail::write_binary(ofs, M_);
-    detail::write_binary(ofs, ef_construction_);
-    detail::write_binary(ofs, ef_search_);
-    detail::write_binary(ofs, mult_);
-    
-    // Random engine state (can be ignored for loading if not critical for reproducibility post-load)
-    // For now, let's skip to keep it simpler, as reconstructing graph structure is enough
+        // Write configuration
+        detail::write_binary(ofs, dim_);
+        detail::write_binary(ofs, metric_);
+        detail::write_binary(ofs, max_elements_);
+        detail::write_binary(ofs, M_);
+        detail::write_binary(ofs, ef_construction_);
+        detail::write_binary(ofs, ef_search_);
+        detail::write_binary(ofs, mult_);
+        
+        // Random engine state (can be ignored for loading if not critical for reproducibility post-load)
+        // For now, let's skip to keep it simpler, as reconstructing graph structure is enough
 
-    // Write graph state
-    detail::write_binary(ofs, cur_element_count_.load());
-    detail::write_binary(ofs, enterpoint_);
-    detail::write_binary(ofs, max_level_);
+        // Write graph state
+        detail::write_binary(ofs, cur_element_count_.load());
+        detail::write_binary(ofs, enterpoint_);
+        detail::write_binary(ofs, max_level_);
 
-    // Write main data vectors
-    detail::write_vector(ofs, vectors_);
-    detail::write_vector(ofs, external_ids_);
-    detail::write_vector(ofs, levels_);
+        // Write main data vectors
+        detail::write_vector(ofs, vectors_);
+        detail::write_vector(ofs, external_ids_);
+        detail::write_vector(ofs, levels_);
 
-    // Write id_to_internal_ map
-    detail::write_binary(ofs, id_to_internal_.size());
-    for (const auto& pair : id_to_internal_) {
-        detail::write_binary(ofs, pair.first);  // uint64_t id
-        detail::write_binary(ofs, pair.second); // size_t internal_id
-    }
-
-    // Write neighbors_ (vector of vectors of vectors)
-    detail::write_binary(ofs, neighbors_.size()); // Should be max_elements
-    for (size_t i = 0; i < neighbors_.size(); ++i) {
-        detail::write_binary(ofs, neighbors_[i].size()); // Number of levels for this node
-        for (size_t l = 0; l < neighbors_[i].size(); ++l) {
-            detail::write_vector(ofs, neighbors_[i][l]);
+        // Write id_to_internal_ map
+        detail::write_binary(ofs, id_to_internal_.size());
+        for (const auto& pair : id_to_internal_) {
+            detail::write_binary(ofs, pair.first);  // uint64_t id
+            detail::write_binary(ofs, pair.second); // size_t internal_id
         }
+
+        // Write neighbors_ (vector of vectors of vectors)
+        detail::write_binary(ofs, neighbors_.size()); // Should be max_elements
+        for (size_t i = 0; i < neighbors_.size(); ++i) {
+            detail::write_binary(ofs, neighbors_[i].size()); // Number of levels for this node
+            for (size_t l = 0; l < neighbors_[i].size(); ++l) {
+                detail::write_vector(ofs, neighbors_[i][l]);
+            }
+        }
+        ofs.close();
+
+        // Atomic rename
+        std::filesystem::rename(temp_filename, filename);
+    } catch (...) {
+        // Try to clean up temp file on failure
+        ofs.close();
+        std::filesystem::remove(temp_filename);
+        throw;
     }
-    ofs.close();
   }
 
   /**

@@ -13,9 +13,9 @@ endif()
 add_compile_options(-Wall -Wextra -Wpedantic)
 
 # Configuration-specific flags
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -march=native")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
 
 # Header-only library
 add_library(quiverdb INTERFACE)

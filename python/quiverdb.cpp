@@ -57,18 +57,43 @@ PYBIND11_MODULE(quiverdb_py, m) {
             },
             py::arg("id"), py::arg("vector"),
             "Adds a vector to the index")
-        .def("search", [](const HNSWIndex& self, const std::vector<float>& query_vector, size_t k) {
-                // Convert C++ HNSWSearchResult to Python-friendly PyHNSWSearchResult
-                std::vector<HNSWSearchResult> cpp_results = self.search(query_vector.data(), k);
-                std::vector<PyHNSWSearchResult> py_results;
-                py_results.reserve(cpp_results.size());
-                for (const auto& res : cpp_results) {
-                    py_results.push_back({res.id, res.distance});
+        .def("get_vector", [](const HNSWIndex& self, uint64_t id) {
+                std::vector<float> vec = self.get_vector(id);
+                return py::array_t<float>(
+                    {vec.size()}, // Shape
+                    {sizeof(float)}, // Strides
+                    vec.data() // Data pointer (copies data)
+                );
+            },
+            py::arg("id"),
+            "Retrieves the vector associated with the given ID as a numpy array")
+        .def("search", [](const HNSWIndex& self, py::array_t<float> query_array, size_t k) {
+                py::buffer_info buf = query_array.request();
+                if (buf.ndim != 1) {
+                    throw std::runtime_error("Query vector must be a 1-dimensional array");
                 }
-                return py_results;
+                if (buf.size != self.dimension()) {
+                    throw std::runtime_error("Query dimension mismatch");
+                }
+
+                std::vector<HNSWSearchResult> results = self.search(static_cast<const float*>(buf.ptr), k);
+                
+                // Create numpy arrays for IDs and distances
+                py::array_t<uint64_t> ids(static_cast<ssize_t>(results.size()));
+                py::array_t<float> dists(static_cast<ssize_t>(results.size()));
+
+                auto ids_ptr = ids.mutable_unchecked<1>();
+                auto dists_ptr = dists.mutable_unchecked<1>();
+
+                for (size_t i = 0; i < results.size(); ++i) {
+                    ids_ptr(i) = results[i].id;
+                    dists_ptr(i) = results[i].distance;
+                }
+
+                return py::make_tuple(ids, dists);
             },
             py::arg("query_vector"), py::arg("k"),
-            "Searches for k nearest neighbors")
+            "Searches for k nearest neighbors. Returns a tuple (ids, distances).")
         .def("size", &HNSWIndex::size, "Returns the number of vectors in the index")
         .def("dimension", &HNSWIndex::dimension, "Returns the dimension of stored vectors")
         .def("capacity", &HNSWIndex::capacity, "Returns the maximum capacity of the index")

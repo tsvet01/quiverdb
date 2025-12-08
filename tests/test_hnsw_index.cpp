@@ -92,6 +92,20 @@ TEST_CASE("HNSWIndex - add and search", "[hnsw]") {
     index.add(1, vec.data());
     REQUIRE_THROWS_AS(index.search(vec.data(), 0), std::invalid_argument);
   }
+
+  SECTION("Index full throws") {
+    constexpr size_t small_capacity = 5;
+    quiverdb::HNSWIndex small_index(dim, quiverdb::HNSWDistanceMetric::L2, small_capacity);
+
+    std::vector<float> vec(dim, 1.0f);
+    for (uint64_t i = 0; i < small_capacity; ++i) {
+      small_index.add(i, vec.data());
+    }
+    REQUIRE(small_index.size() == small_capacity);
+
+    // Adding one more should throw
+    REQUIRE_THROWS_AS(small_index.add(small_capacity, vec.data()), std::runtime_error);
+  }
 }
 
 TEST_CASE("HNSWIndex - search quality", "[hnsw]") {
@@ -376,6 +390,70 @@ TEST_CASE("HNSWIndex - serialization", "[hnsw][serialization]") {
   SECTION("Loading from non-existent file throws") {
     std::filesystem::remove(filename); // Ensure file doesn't exist
     REQUIRE_THROWS_AS(quiverdb::HNSWIndex::load(filename + "_nonexistent"), std::runtime_error);
+  }
+
+  SECTION("Loading corrupted file - bad magic number") {
+    // Create a file with wrong magic number
+    std::string corrupt_file = filename + "_corrupt_magic";
+    {
+      std::ofstream ofs(corrupt_file, std::ios::binary);
+      uint32_t bad_magic = 0xDEADBEEF;
+      ofs.write(reinterpret_cast<const char*>(&bad_magic), sizeof(bad_magic));
+    }
+    REQUIRE_THROWS_AS(quiverdb::HNSWIndex::load(corrupt_file), std::runtime_error);
+    std::filesystem::remove(corrupt_file);
+  }
+
+  SECTION("Loading corrupted file - unsupported version") {
+    // Create a file with correct magic but wrong version
+    std::string corrupt_file = filename + "_corrupt_version";
+    {
+      std::ofstream ofs(corrupt_file, std::ios::binary);
+      uint32_t magic = 0x51565244; // "QVRD" - correct magic
+      uint32_t bad_version = 999;
+      ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+      ofs.write(reinterpret_cast<const char*>(&bad_version), sizeof(bad_version));
+    }
+    REQUIRE_THROWS_AS(quiverdb::HNSWIndex::load(corrupt_file), std::runtime_error);
+    std::filesystem::remove(corrupt_file);
+  }
+
+  SECTION("Loading truncated file") {
+    // Save valid index then truncate it
+    original_index.save(filename);
+
+    // Truncate the file to 50 bytes (incomplete header)
+    {
+      std::ofstream ofs(filename, std::ios::binary | std::ios::trunc);
+      uint32_t magic = 0x51565244; // "QVRD" - correct magic but truncated
+      ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+      // Write partial data - this should fail on load
+    }
+    REQUIRE_THROWS(quiverdb::HNSWIndex::load(filename));
+  }
+
+  SECTION("Loading empty file") {
+    std::string empty_file = filename + "_empty";
+    {
+      std::ofstream ofs(empty_file, std::ios::binary);
+      // Empty file
+    }
+    REQUIRE_THROWS(quiverdb::HNSWIndex::load(empty_file));
+    std::filesystem::remove(empty_file);
+  }
+
+  SECTION("get_vector returns correct data after save/load") {
+    original_index.save(filename);
+    auto loaded = quiverdb::HNSWIndex::load(filename);
+
+    // Verify vectors are preserved
+    for (size_t i = 0; i < test_vectors.size(); ++i) {
+      std::vector<float> retrieved = loaded->get_vector(static_cast<uint64_t>(i + 1));
+      REQUIRE(retrieved.size() == dim);
+      for (size_t j = 0; j < dim; ++j) {
+        REQUIRE(retrieved[j] == Approx(test_vectors[i][j]).margin(1e-6f));
+      }
+    }
   }
 
   // Cleanup

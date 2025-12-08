@@ -10,6 +10,7 @@ jobs:
   build-and-test:
     name: ${{ matrix.os }} - ${{ matrix.compiler }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
 
     strategy:
       fail-fast: false
@@ -35,6 +36,15 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Cache CMake build
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/_deps
+        key: ${{ runner.os }}-${{ matrix.compiler }}-deps-${{ hashFiles('CMakeLists.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.compiler }}-deps-
 
     - name: Set up compiler (Unix)
       if: runner.os != 'Windows'
@@ -64,12 +74,278 @@ jobs:
       if: runner.os != 'Windows'
       run: |
         cd build
-        ./bench_distance --benchmark_min_time=0.05s --benchmark_filter=API/768
-        ./bench_vector_store --benchmark_min_time=0.05s --benchmark_filter=Search_L2/100
+        ./bench_distance --benchmark_min_time=0.05s --benchmark_filter=BM_L2/768 --benchmark_format=json > bench_distance.json
+        ./bench_vector_store --benchmark_min_time=0.05s --benchmark_filter=BM_VectorStore_Search_L2/100 --benchmark_format=json > bench_vector_store.json
+        ./bench_hnsw_index --benchmark_min_time=0.05s --benchmark_filter=BM_HNSW_Search/100 --benchmark_format=json > bench_hnsw_index.json
+        cat bench_distance.json bench_vector_store.json bench_hnsw_index.json
 
     - name: Run benchmarks (Windows)
       if: runner.os == 'Windows'
       run: |
         cd build
-        .\${{ matrix.build_type }}\bench_distance.exe --benchmark_min_time=0.05s --benchmark_filter=API/768
-        .\${{ matrix.build_type }}\bench_vector_store.exe --benchmark_min_time=0.05s --benchmark_filter=Search_L2/100
+        .\${{ matrix.build_type }}\bench_distance.exe --benchmark_min_time=0.05s --benchmark_filter=BM_L2/768 --benchmark_format=json > bench_distance.json
+        .\${{ matrix.build_type }}\bench_vector_store.exe --benchmark_min_time=0.05s --benchmark_filter=BM_VectorStore_Search_L2/100 --benchmark_format=json > bench_vector_store.json
+        .\${{ matrix.build_type }}\bench_hnsw_index.exe --benchmark_min_time=0.05s --benchmark_filter=BM_HNSW_Search/100 --benchmark_format=json > bench_hnsw_index.json
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmarks-${{ matrix.os }}-${{ matrix.compiler }}
+        path: build/bench_*.json
+        retention-days: 90
+
+  python-tests:
+    name: Python Bindings Tests
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.9', '3.11']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest numpy
+
+    - name: Configure and build with Python bindings
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DQUIVERDB_BUILD_PYTHON=ON -DQUIVERDB_BUILD_TESTS=OFF -DQUIVERDB_BUILD_BENCHMARKS=OFF -DQUIVERDB_BUILD_EXAMPLES=OFF
+
+    - name: Build
+      run: |
+        cmake --build build --config Release --parallel
+
+    - name: Run Python tests (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        PYTHONPATH=build pytest tests/test_python_bindings.py -v
+
+    - name: Run Python tests (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        $env:PYTHONPATH = "build\Release"
+        pytest tests/test_python_bindings.py -v
+
+  sanitizers:
+    name: Sanitizer Checks (${{ matrix.sanitizer }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, undefined]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure CMake with sanitizer
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_CXX_FLAGS="-fsanitize=${{ matrix.sanitizer }} -fno-omit-frame-pointer" \
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=${{ matrix.sanitizer }}" \
+          -DQUIVERDB_BUILD_PYTHON=OFF
+
+    - name: Build
+      run: |
+        cmake --build build --parallel
+
+    - name: Run tests with sanitizer
+      run: |
+        cd build && ctest --output-on-failure
+      env:
+        ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+        UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install lcov
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y lcov
+
+    - name: Configure CMake with coverage
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_CXX_FLAGS="--coverage -fprofile-arcs -ftest-coverage" \
+          -DCMAKE_EXE_LINKER_FLAGS="--coverage" \
+          -DQUIVERDB_BUILD_PYTHON=OFF
+
+    - name: Build
+      run: |
+        cmake --build build --parallel
+
+    - name: Run tests
+      run: |
+        cd build && ctest --output-on-failure
+
+    - name: Capture coverage
+      run: |
+        lcov --capture --directory build --output-file coverage.info --ignore-errors mismatch
+        lcov --remove coverage.info '/usr/*' '*/external/*' '*/build/_deps/*' --output-file coverage.info
+        lcov --list coverage.info
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: coverage.info
+        fail_ci_if_error: false
+        verbose: true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  linux-arm64:
+    name: Linux ARM64 (QEMU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
+
+    - name: Build and test on ARM64
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: .github/Dockerfile.arm64-test
+        platforms: linux/arm64
+        push: false
+
+  ios-build:
+    name: iOS (arm64)
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Select Xcode
+      run: |
+        sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+        xcodebuild -version
+
+    - name: Configure CMake for iOS
+      run: |
+        cmake -B build-ios \
+          -DCMAKE_SYSTEM_NAME=iOS \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+          -DCMAKE_OSX_ARCHITECTURES=arm64 \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DQUIVERDB_BUILD_TESTS=OFF \
+          -DQUIVERDB_BUILD_BENCHMARKS=OFF \
+          -DQUIVERDB_BUILD_PYTHON=OFF \
+          -DQUIVERDB_BUILD_EXAMPLES=OFF \
+          -GXcode
+
+    - name: Build for iOS
+      run: |
+        cmake --build build-ios --config Release -- -sdk iphoneos -arch arm64 CODE_SIGNING_ALLOWED=NO
+
+    - name: Verify iOS build
+      run: |
+        echo "iOS arm64 build completed successfully"
+        ls -la build-ios/Release* 2>/dev/null || echo "Header-only library verified"
+
+  android-build:
+    name: Android (arm64-v8a)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Android NDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install NDK
+      run: |
+        sdkmanager --install "ndk;26.1.10909125"
+        echo "ANDROID_NDK=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+
+    - name: Configure CMake for Android
+      run: |
+        cmake -B build-android \
+          -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+          -DANDROID_ABI=arm64-v8a \
+          -DANDROID_PLATFORM=android-24 \
+          -DANDROID_STL=c++_shared \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DQUIVERDB_BUILD_TESTS=OFF \
+          -DQUIVERDB_BUILD_BENCHMARKS=OFF \
+          -DQUIVERDB_BUILD_PYTHON=OFF \
+          -DQUIVERDB_BUILD_EXAMPLES=OFF
+
+    - name: Build for Android
+      run: |
+        cmake --build build-android --config Release --parallel
+
+    - name: Verify Android binary
+      run: |
+        # Check that the build completed for Android ARM64
+        file build-android/libquiverdb* 2>/dev/null || echo "Header-only library - checking compilation succeeded"
+        echo "Android arm64-v8a build completed successfully"
+
+  android-x86_64-build:
+    name: Android (x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Android NDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install NDK
+      run: |
+        sdkmanager --install "ndk;26.1.10909125"
+        echo "ANDROID_NDK=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+
+    - name: Configure CMake for Android x86_64
+      run: |
+        cmake -B build-android-x86_64 \
+          -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+          -DANDROID_ABI=x86_64 \
+          -DANDROID_PLATFORM=android-24 \
+          -DANDROID_STL=c++_shared \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DQUIVERDB_BUILD_TESTS=OFF \
+          -DQUIVERDB_BUILD_BENCHMARKS=OFF \
+          -DQUIVERDB_BUILD_PYTHON=OFF \
+          -DQUIVERDB_BUILD_EXAMPLES=OFF
+
+    - name: Build for Android x86_64
+      run: |
+        cmake --build build-android-x86_64 --config Release --parallel
+
+    - name: Verify Android x86_64 binary
+      run: |
+        echo "Android x86_64 build completed successfully"

@@ -10,12 +10,18 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # General warning flags for all targets and configurations
-add_compile_options(-Wall -Wextra -Wpedantic)
+if(MSVC)
+  add_compile_options(/W4)
+else()
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
 
 # Configuration-specific flags
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
+if(NOT MSVC)
+  set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+  set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
+endif()
 
 # Header-only library
 add_library(quiverdb INTERFACE)
@@ -28,6 +34,7 @@ target_include_directories(quiverdb INTERFACE
 option(QUIVERDB_BUILD_TESTS "Build tests" ON)
 option(QUIVERDB_BUILD_BENCHMARKS "Build benchmarks" ON)
 option(QUIVERDB_BUILD_EXAMPLES "Build examples" ON)
+option(QUIVERDB_BUILD_PYTHON "Build Python bindings" ON)
 
 # Fetch dependencies
 include(FetchContent)
@@ -91,12 +98,19 @@ target_compile_options(test_hnsw_index PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /arch:AVX2>
 )
 
+add_executable(test_mmap_vector_store tests/test_mmap_vector_store.cpp)
+target_link_libraries(test_mmap_vector_store PRIVATE quiverdb Catch2::Catch2WithMain)
+target_compile_options(test_mmap_vector_store PRIVATE
+  $<$<CXX_COMPILER_ID:MSVC>:/W4>
+)
+
 include(CTest)
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
 catch_discover_tests(test_distance)
 catch_discover_tests(test_vector_store)
 catch_discover_tests(test_hnsw_index)
+catch_discover_tests(test_mmap_vector_store)
 endif() # QUIVERDB_BUILD_TESTS
 
 # Examples
@@ -108,23 +122,46 @@ target_compile_options(semantic_search_example PRIVATE
 )
 endif() # QUIVERDB_BUILD_EXAMPLES
 
+# GPU support (optional)
+option(QUIVERDB_BUILD_METAL "Build Metal GPU tests (macOS only)" OFF)
+option(QUIVERDB_BUILD_CUDA "Build CUDA GPU support" OFF)
+
+# Metal GPU test (macOS only)
+if(QUIVERDB_BUILD_METAL AND APPLE)
+  enable_language(OBJCXX)
+  add_executable(test_metal_distance tests/test_metal_distance.mm)
+  target_link_libraries(test_metal_distance PRIVATE quiverdb "-framework Metal" "-framework Foundation")
+  target_compile_options(test_metal_distance PRIVATE -fobjc-arc)
+  set_target_properties(test_metal_distance PROPERTIES
+    MACOSX_BUNDLE FALSE
+    CXX_STANDARD 20
+  )
+endif()
+
+# CUDA GPU support
+if(QUIVERDB_BUILD_CUDA)
+  enable_language(CUDA)
+  # CUDA targets would be added here when needed
+endif()
+
 # Install
 install(TARGETS quiverdb EXPORT quiverdb-targets)
-install(DIRECTORY src/core/ DESTINATION include/quiverdb FILES_MATCHING PATTERN "*.h")
+install(DIRECTORY src/core/ DESTINATION include/quiverdb FILES_MATCHING PATTERN "*.h" PATTERN "*.cuh")
 install(EXPORT quiverdb-targets FILE quiverdb-config.cmake DESTINATION lib/cmake/quiverdb)
 
-# Pybind11 for Python bindings
-FetchContent_Declare(
-  pybind11
-  GIT_REPOSITORY https://github.com/pybind/pybind11.git
-  GIT_TAG v2.12.0
-)
-FetchContent_MakeAvailable(pybind11)
+# Python bindings (optional)
+if(QUIVERDB_BUILD_PYTHON)
+  FetchContent_Declare(
+    pybind11
+    GIT_REPOSITORY https://github.com/pybind/pybind11.git
+    GIT_TAG v2.12.0
+  )
+  FetchContent_MakeAvailable(pybind11)
 
-# Python bindings
-pybind11_add_module(quiverdb_py MODULE python/quiverdb.cpp)
-target_link_libraries(quiverdb_py PRIVATE quiverdb pybind11::embed)
-target_compile_options(quiverdb_py PRIVATE
-  $<$<CXX_COMPILER_ID:MSVC>:/W4 /arch:AVX2>
-)
+  pybind11_add_module(quiverdb_py MODULE python/quiverdb.cpp)
+  target_link_libraries(quiverdb_py PRIVATE quiverdb pybind11::module)
+  target_compile_options(quiverdb_py PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /arch:AVX2>
+  )
+endif() # QUIVERDB_BUILD_PYTHON
 

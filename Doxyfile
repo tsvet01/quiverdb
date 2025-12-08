@@ -1,0 +1,49 @@
+# Doxyfile for QuiverDB
+
+PROJECT_NAME           = "QuiverDB"
+PROJECT_NUMBER         = "0.1.0"
+PROJECT_BRIEF          = "Embeddable vector database for edge AI"
+OUTPUT_DIRECTORY       = docs
+
+# Input
+INPUT                  = src README.md
+FILE_PATTERNS          = *.h *.hpp *.md
+RECURSIVE              = YES
+USE_MDFILE_AS_MAINPAGE = README.md
+
+# Output formats
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+HTML_OUTPUT            = html
+HTML_EXTRA_STYLESHEET  =
+
+# Extraction settings
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+
+# Source browsing
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+
+# Preprocessing
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = NO
+PREDEFINED             = QUIVER_ARM_NEON QUIVER_AVX2
+
+# Diagrams
+HAVE_DOT               = NO
+CLASS_DIAGRAMS         = YES
+
+# Warnings
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES
+
+# Miscellaneous
+QUIET                  = YES
+WARNINGS               = YES

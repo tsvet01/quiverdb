@@ -52,7 +52,7 @@ PYBIND11_MODULE(quiverdb_py, m) {
              py::arg("M") = 16,
              py::arg("ef_construction") = 200,
              py::arg("random_seed") = 42)
-        .def("add", [](HNSWIndex& self, uint64_t id, py::array_t<float> vector_array) {
+        .def("add", [](HNSWIndex& self, uint64_t id, py::array_t<float, py::array::c_style | py::array::forcecast> vector_array) {
                 py::buffer_info buf = vector_array.request();
                 if (buf.ndim != 1) {
                     throw std::runtime_error("Vector must be a 1-dimensional array");
@@ -82,7 +82,7 @@ PYBIND11_MODULE(quiverdb_py, m) {
             },
             py::arg("id"),
             "Retrieves the vector associated with the given ID as a numpy array")
-        .def("search", [](const HNSWIndex& self, py::array_t<float> query_array, size_t k) {
+        .def("search", [](const HNSWIndex& self, py::array_t<float, py::array::c_style | py::array::forcecast> query_array, size_t k) {
                 py::buffer_info buf = query_array.request();
                 if (buf.ndim != 1) {
                     throw std::runtime_error("Query vector must be a 1-dimensional array");
@@ -145,7 +145,7 @@ PYBIND11_MODULE(quiverdb_py, m) {
              py::arg("dimension"),
              py::arg("metric") = DistanceMetric::L2,
              "Creates a new in-memory vector store")
-        .def("add", [](VectorStore& self, uint64_t id, py::array_t<float> vector_array) {
+        .def("add", [](VectorStore& self, uint64_t id, py::array_t<float, py::array::c_style | py::array::forcecast> vector_array) {
                 py::buffer_info buf = vector_array.request();
                 if (buf.ndim != 1) {
                     throw std::runtime_error("Vector must be a 1-dimensional array");
@@ -171,7 +171,7 @@ PYBIND11_MODULE(quiverdb_py, m) {
             },
             py::arg("id"),
             "Gets a vector by ID, returns None if not found")
-        .def("search", [](const VectorStore& self, py::array_t<float> query_array, size_t k) {
+        .def("search", [](const VectorStore& self, py::array_t<float, py::array::c_style | py::array::forcecast> query_array, size_t k) {
                 py::buffer_info buf = query_array.request();
                 if (buf.ndim != 1) {
                     throw std::runtime_error("Query vector must be a 1-dimensional array");
@@ -201,7 +201,7 @@ PYBIND11_MODULE(quiverdb_py, m) {
             py::arg("query_vector"), py::arg("k"),
             "Searches for k nearest neighbors. Returns (ids, distances).")
         .def("remove", &VectorStore::remove, py::arg("id"), "Removes a vector by ID")
-        .def("update", [](VectorStore& self, uint64_t id, py::array_t<float> vector_array) {
+        .def("update", [](VectorStore& self, uint64_t id, py::array_t<float, py::array::c_style | py::array::forcecast> vector_array) {
                 py::buffer_info buf = vector_array.request();
                 if (buf.ndim != 1) {
                     throw std::runtime_error("Vector must be a 1-dimensional array");
@@ -225,7 +225,7 @@ PYBIND11_MODULE(quiverdb_py, m) {
              py::arg("dimension"),
              py::arg("metric") = DistanceMetric::L2,
              "Creates a new builder for memory-mapped vector store")
-        .def("add", [](MMapVectorStoreBuilder& self, uint64_t id, py::array_t<float> vector_array) {
+        .def("add", [](MMapVectorStoreBuilder& self, uint64_t id, py::array_t<float, py::array::c_style | py::array::forcecast> vector_array) {
                 py::buffer_info buf = vector_array.request();
                 if (buf.ndim != 1) {
                     throw std::runtime_error("Vector must be a 1-dimensional array");
@@ -267,7 +267,7 @@ PYBIND11_MODULE(quiverdb_py, m) {
             },
             py::arg("id"),
             "Gets a vector by ID (zero-copy from mmap), returns None if not found")
-        .def("search", [](const MMapVectorStore& self, py::array_t<float> query_array, size_t k) {
+        .def("search", [](const MMapVectorStore& self, py::array_t<float, py::array::c_style | py::array::forcecast> query_array, size_t k) {
                 py::buffer_info buf = query_array.request();
                 if (buf.ndim != 1) {
                     throw std::runtime_error("Query vector must be a 1-dimensional array");

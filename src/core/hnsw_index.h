@@ -35,7 +35,8 @@ template <typename T> void write_vec(std::ofstream& f, const std::vector<T>& v) 
 constexpr size_t MAX_VEC_SIZE = 100000000ULL;
 template <typename T> void read_vec(std::ifstream& f, std::vector<T>& v) {
   size_t sz; read_bin(f, sz);
-  if (sz > MAX_VEC_SIZE) throw std::runtime_error("Corrupted file: vector too large");
+  if (sz > MAX_VEC_SIZE || sz > SIZE_MAX / sizeof(T))
+    throw std::runtime_error("Corrupted file: vector too large");
   v.resize(sz);
   if (!v.empty()) f.read(reinterpret_cast<char*>(v.data()), sz * sizeof(T));
 }

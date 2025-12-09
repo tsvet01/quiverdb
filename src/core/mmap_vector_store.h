@@ -89,7 +89,10 @@ public:
     ids_ptr_ = reinterpret_cast<const uint64_t*>(static_cast<const uint8_t*>(mapped_) + HEADER_SIZE);
     vectors_ptr_ = reinterpret_cast<const float*>(
         static_cast<const uint8_t*>(mapped_) + HEADER_SIZE + num_vectors_ * sizeof(uint64_t));
-    for (size_t i = 0; i < num_vectors_; ++i) id_map_[ids_ptr_[i]] = i;
+    try {
+      id_map_.reserve(num_vectors_);
+      for (size_t i = 0; i < num_vectors_; ++i) id_map_[ids_ptr_[i]] = i;
+    } catch (...) { cleanup(); throw; }
   }
 
   ~MMapVectorStore() { cleanup(); }

@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <mutex>
 #include <shared_mutex>
 #include <stdexcept>
 #include <string>

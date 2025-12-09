@@ -99,8 +99,8 @@ PYBIND11_MODULE(quiverdb_py, m) {
                 }
 
                 // Create numpy arrays for IDs and distances (requires GIL)
-                py::array_t<uint64_t> ids(static_cast<ssize_t>(results.size()));
-                py::array_t<float> dists(static_cast<ssize_t>(results.size()));
+                py::array_t<uint64_t> ids(static_cast<py::ssize_t>(results.size()));
+                py::array_t<float> dists(static_cast<py::ssize_t>(results.size()));
 
                 auto ids_ptr = ids.mutable_unchecked<1>();
                 auto dists_ptr = dists.mutable_unchecked<1>();
@@ -186,8 +186,8 @@ PYBIND11_MODULE(quiverdb_py, m) {
                     results = self.search(static_cast<const float*>(buf.ptr), k);
                 }
 
-                py::array_t<uint64_t> ids(static_cast<ssize_t>(results.size()));
-                py::array_t<float> dists(static_cast<ssize_t>(results.size()));
+                py::array_t<uint64_t> ids(static_cast<py::ssize_t>(results.size()));
+                py::array_t<float> dists(static_cast<py::ssize_t>(results.size()));
                 auto ids_ptr = ids.mutable_unchecked<1>();
                 auto dists_ptr = dists.mutable_unchecked<1>();
 
@@ -282,8 +282,8 @@ PYBIND11_MODULE(quiverdb_py, m) {
                     results = self.search(static_cast<const float*>(buf.ptr), k);
                 }
 
-                py::array_t<uint64_t> ids(static_cast<ssize_t>(results.size()));
-                py::array_t<float> dists(static_cast<ssize_t>(results.size()));
+                py::array_t<uint64_t> ids(static_cast<py::ssize_t>(results.size()));
+                py::array_t<float> dists(static_cast<py::ssize_t>(results.size()));
                 auto ids_ptr = ids.mutable_unchecked<1>();
                 auto dists_ptr = dists.mutable_unchecked<1>();
 

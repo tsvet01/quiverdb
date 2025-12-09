@@ -3,6 +3,7 @@
 
 #if defined(_WIN32) || defined(_WIN64)
 #define QUIVERDB_WINDOWS 1
+#define NOMINMAX  // Prevent Windows.h from defining min/max macros
 #include <windows.h>
 #else
 #define QUIVERDB_POSIX 1

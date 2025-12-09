@@ -250,16 +250,18 @@ TEST_CASE("MMapVectorStore - cosine metric", "[mmap]") {
   builder.add(3, vec3);
   builder.save(filename);
 
-  quiverdb::MMapVectorStore store(filename);
+  {
+    quiverdb::MMapVectorStore store(filename);
 
-  float query[] = {3.0f, 0.0f, 0.0f, 0.0f};
-  auto results = store.search(query, 2);
+    float query[] = {3.0f, 0.0f, 0.0f, 0.0f};
+    auto results = store.search(query, 2);
 
-  // vec1 and vec2 should be closest (same direction)
-  REQUIRE(results.size() == 2);
-  REQUIRE((results[0].id == 1 || results[0].id == 2));
-  REQUIRE((results[1].id == 1 || results[1].id == 2));
-  REQUIRE(results[0].distance == Approx(0.0f).margin(1e-5f));
+    // vec1 and vec2 should be closest (same direction)
+    REQUIRE(results.size() == 2);
+    REQUIRE((results[0].id == 1 || results[0].id == 2));
+    REQUIRE((results[1].id == 1 || results[1].id == 2));
+    REQUIRE(results[0].distance == Approx(0.0f).margin(1e-5f));
+  }  // store destructor unmaps file before removal
 
   std::filesystem::remove(filename);
 }
@@ -279,14 +281,16 @@ TEST_CASE("MMapVectorStore - dot product metric", "[mmap]") {
   builder.add(3, vec3);
   builder.save(filename);
 
-  quiverdb::MMapVectorStore store(filename);
+  {
+    quiverdb::MMapVectorStore store(filename);
 
-  float query[] = {1.0f, 0.0f, 0.0f, 0.0f};
-  auto results = store.search(query, 1);
+    float query[] = {1.0f, 0.0f, 0.0f, 0.0f};
+    auto results = store.search(query, 1);
 
-  // vec2 should be first (highest dot product = smallest negative distance)
-  REQUIRE(results.size() == 1);
-  REQUIRE(results[0].id == 2);
+    // vec2 should be first (highest dot product = smallest negative distance)
+    REQUIRE(results.size() == 1);
+    REQUIRE(results[0].id == 2);
+  }  // store destructor unmaps file before removal
 
   std::filesystem::remove(filename);
 }

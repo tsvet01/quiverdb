@@ -166,7 +166,8 @@ PYBIND11_MODULE(quiverdb_py, m) {
                 return py::array_t<float>(
                     {self.dimension()},
                     {sizeof(float)},
-                    ptr
+                    ptr,
+                    py::cast(&self)  // Keep store alive while array exists
                 );
             },
             py::arg("id"),

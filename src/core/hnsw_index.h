@@ -53,6 +53,9 @@ struct HNSWSearchResult {
 
 class HNSWIndex {
 public:
+  static constexpr uint32_t MAGIC = 0x51565244;  // "DRVQ" in little-endian
+  static constexpr uint32_t VERSION = 1;
+
   explicit HNSWIndex(size_t dimension, HNSWDistanceMetric metric = HNSWDistanceMetric::L2,
       size_t max_elements = 100000, size_t M = 16, size_t ef_construction = 200, uint32_t seed = 42)
       : dim_(dimension), metric_(metric), max_elements_(max_elements), M_(M), M_max_(M),
@@ -60,6 +63,7 @@ public:
         mult_(1.0 / std::log(static_cast<double>(M))), level_gen_(seed), ep_(-1), max_level_(-1) {
     if (dimension == 0) throw std::invalid_argument("Dimension must be > 0");
     if (max_elements == 0) throw std::invalid_argument("max_elements must be > 0");
+    if (max_elements > SIZE_MAX / dim_) throw std::invalid_argument("max_elements * dimension overflow");
     vectors_.resize(max_elements * dim_);
     ext_ids_.resize(max_elements);
     levels_.resize(max_elements, 0);
@@ -183,8 +187,8 @@ public:
     std::ofstream f(tmp, std::ios::binary);
     if (!f) throw std::runtime_error("Cannot open: " + tmp);
     try {
-      detail::write_bin(f, uint32_t(0x51565244));
-      detail::write_bin(f, uint32_t(1));
+      detail::write_bin(f, MAGIC);
+      detail::write_bin(f, VERSION);
       detail::write_bin(f, dim_);
       detail::write_bin(f, static_cast<uint32_t>(metric_));
       detail::write_bin(f, max_elements_);
@@ -216,9 +220,9 @@ public:
     if (!f) throw std::runtime_error("Cannot open: " + filename);
     uint32_t magic, ver;
     detail::read_bin(f, magic);
-    if (magic != 0x51565244) throw std::runtime_error("Invalid magic");
+    if (magic != MAGIC) throw std::runtime_error("Invalid magic");
     detail::read_bin(f, ver);
-    if (ver != 1) throw std::runtime_error("Unsupported version");
+    if (ver != VERSION) throw std::runtime_error("Unsupported version");
 
     size_t dim, max_el, M, ef_con, ef_s; uint32_t met; double mult;
     detail::read_bin(f, dim);

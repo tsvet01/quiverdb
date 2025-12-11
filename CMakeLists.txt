@@ -35,6 +35,7 @@ option(QUIVERDB_BUILD_TESTS "Build tests" ON)
 option(QUIVERDB_BUILD_BENCHMARKS "Build benchmarks" ON)
 option(QUIVERDB_BUILD_EXAMPLES "Build examples" ON)
 option(QUIVERDB_BUILD_PYTHON "Build Python bindings" ON)
+option(QUIVERDB_COVERAGE "Build with code coverage instrumentation" OFF)
 
 # Fetch dependencies
 include(FetchContent)
@@ -80,29 +81,43 @@ FetchContent_MakeAvailable(Catch2)
 
 enable_testing()
 
+# Coverage flags for test targets only (not dependencies)
+if(QUIVERDB_COVERAGE AND NOT MSVC)
+  set(COVERAGE_COMPILE_FLAGS --coverage -fprofile-arcs -ftest-coverage)
+  set(COVERAGE_LINK_FLAGS --coverage)
+endif()
+
 add_executable(test_distance tests/test_distance.cpp)
 target_link_libraries(test_distance PRIVATE quiverdb Catch2::Catch2WithMain)
 target_compile_options(test_distance PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4>
+  ${COVERAGE_COMPILE_FLAGS}
 )
+target_link_options(test_distance PRIVATE ${COVERAGE_LINK_FLAGS})
 
 add_executable(test_vector_store tests/test_vector_store.cpp)
 target_link_libraries(test_vector_store PRIVATE quiverdb Catch2::Catch2WithMain)
 target_compile_options(test_vector_store PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4>
+  ${COVERAGE_COMPILE_FLAGS}
 )
+target_link_options(test_vector_store PRIVATE ${COVERAGE_LINK_FLAGS})
 
 add_executable(test_hnsw_index tests/test_hnsw_index.cpp)
 target_link_libraries(test_hnsw_index PRIVATE quiverdb Catch2::Catch2WithMain)
 target_compile_options(test_hnsw_index PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /arch:AVX2>
+  ${COVERAGE_COMPILE_FLAGS}
 )
+target_link_options(test_hnsw_index PRIVATE ${COVERAGE_LINK_FLAGS})
 
 add_executable(test_mmap_vector_store tests/test_mmap_vector_store.cpp)
 target_link_libraries(test_mmap_vector_store PRIVATE quiverdb Catch2::Catch2WithMain)
 target_compile_options(test_mmap_vector_store PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4>
+  ${COVERAGE_COMPILE_FLAGS}
 )
+target_link_options(test_mmap_vector_store PRIVATE ${COVERAGE_LINK_FLAGS})
 
 include(CTest)
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)

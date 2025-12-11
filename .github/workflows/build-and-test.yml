@@ -187,8 +187,7 @@ jobs:
       run: |
         cmake -B build \
           -DCMAKE_BUILD_TYPE=Debug \
-          -DCMAKE_CXX_FLAGS="--coverage -fprofile-arcs -ftest-coverage" \
-          -DCMAKE_EXE_LINKER_FLAGS="--coverage" \
+          -DQUIVERDB_COVERAGE=ON \
           -DQUIVERDB_BUILD_PYTHON=OFF
 
     - name: Build
@@ -201,8 +200,8 @@ jobs:
 
     - name: Capture coverage
       run: |
-        lcov --capture --directory build --output-file coverage.info --ignore-errors mismatch,negative
-        lcov --remove coverage.info '/usr/*' '*/external/*' '*/build/_deps/*' --output-file coverage.info --ignore-errors unused
+        lcov --capture --directory build --output-file coverage.info --ignore-errors mismatch
+        lcov --remove coverage.info '/usr/*' '*/external/*' '*/build/_deps/*' --output-file coverage.info
         lcov --list coverage.info
 
     - name: Upload coverage to Codecov

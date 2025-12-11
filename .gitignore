@@ -51,3 +51,4 @@ external/
 
 # Build artifacts
 build_py/
+build_cov/

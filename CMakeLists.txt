@@ -84,7 +84,7 @@ enable_testing()
 # Coverage flags for test targets only (not dependencies)
 if(QUIVERDB_COVERAGE AND NOT MSVC)
   set(COVERAGE_COMPILE_FLAGS --coverage -fprofile-arcs -ftest-coverage -fprofile-update=atomic)
-  set(COVERAGE_LINK_FLAGS "--coverage -fprofile-update=atomic")
+  set(COVERAGE_LINK_FLAGS --coverage -fprofile-update=atomic)
 endif()
 
 add_executable(test_distance tests/test_distance.cpp)

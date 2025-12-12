@@ -1,5 +1,6 @@
 // QuiverDB - Copyright (c) 2025 Anton Tsvetkov - MIT License
 #pragma once
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -126,7 +127,7 @@ namespace quiverdb {
   float denom = na * nb;
   if (denom < 1e-12f) return 1.0f;
   float sim = dot / sqrtf(denom);
-  return 1.0f - (sim > 1.0f ? 1.0f : sim < -1.0f ? -1.0f : sim);
+  return 1.0f - std::clamp(sim, -1.0f, 1.0f);
 }
 
 } // namespace quiverdb

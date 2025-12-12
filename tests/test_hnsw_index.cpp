@@ -4,7 +4,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cmath>
-#include <filesystem> // Added for file system operations
+#include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <random>
 #include <thread>
@@ -25,6 +26,15 @@ TEST_CASE("HNSWIndex - construction", "[hnsw]") {
 
   SECTION("Zero max_elements throws") {
     REQUIRE_THROWS_AS(quiverdb::HNSWIndex(768, quiverdb::HNSWDistanceMetric::L2, 0), std::invalid_argument);
+  }
+
+  SECTION("M < 2 throws") {
+    // M=0 should throw
+    REQUIRE_THROWS_AS(quiverdb::HNSWIndex(768, quiverdb::HNSWDistanceMetric::L2, 1000, 0), std::invalid_argument);
+    // M=1 should throw
+    REQUIRE_THROWS_AS(quiverdb::HNSWIndex(768, quiverdb::HNSWDistanceMetric::L2, 1000, 1), std::invalid_argument);
+    // M=2 should succeed
+    REQUIRE_NOTHROW(quiverdb::HNSWIndex(768, quiverdb::HNSWDistanceMetric::L2, 1000, 2));
   }
 
   SECTION("Check initial state") {
@@ -440,6 +450,52 @@ TEST_CASE("HNSWIndex - serialization", "[hnsw][serialization]") {
     }
     REQUIRE_THROWS(quiverdb::HNSWIndex::load(empty_file));
     std::filesystem::remove(empty_file);
+  }
+
+  SECTION("Loading corrupted file - invalid entry point") {
+    // Save valid index first
+    original_index.save(filename);
+
+    // Read file, corrupt ep_ to be >= count, write back
+    std::string corrupt_file = filename + "_corrupt_ep";
+    {
+      std::ifstream ifs(filename, std::ios::binary);
+      std::vector<char> data((std::istreambuf_iterator<char>(ifs)),
+                              std::istreambuf_iterator<char>());
+      ifs.close();
+
+      // ep_ is at offset: 4(magic) + 4(version) + 8(dim) + 4(metric) + 8(max_el) + 8(M) +
+      //                   8(ef_con) + 8(ef_s) + 8(mult) + 8(count) = 68 bytes
+      // Write invalid ep_ value (999999, much larger than count)
+      size_t invalid_ep = 999999;
+      std::memcpy(data.data() + 68, &invalid_ep, sizeof(invalid_ep));
+
+      std::ofstream ofs(corrupt_file, std::ios::binary);
+      ofs.write(data.data(), data.size());
+    }
+    REQUIRE_THROWS_AS(quiverdb::HNSWIndex::load(corrupt_file), std::runtime_error);
+    std::filesystem::remove(corrupt_file);
+  }
+
+  SECTION("Loading corrupted file - invalid max_level") {
+    original_index.save(filename);
+
+    std::string corrupt_file = filename + "_corrupt_maxlevel";
+    {
+      std::ifstream ifs(filename, std::ios::binary);
+      std::vector<char> data((std::istreambuf_iterator<char>(ifs)),
+                              std::istreambuf_iterator<char>());
+      ifs.close();
+
+      // max_level_ is at offset 68 + 8(ep_) = 76 bytes
+      int invalid_max_level = 100;  // > MAX_LEVEL (32)
+      std::memcpy(data.data() + 76, &invalid_max_level, sizeof(invalid_max_level));
+
+      std::ofstream ofs(corrupt_file, std::ios::binary);
+      ofs.write(data.data(), data.size());
+    }
+    REQUIRE_THROWS_AS(quiverdb::HNSWIndex::load(corrupt_file), std::runtime_error);
+    std::filesystem::remove(corrupt_file);
   }
 
   SECTION("get_vector returns correct data after save/load") {

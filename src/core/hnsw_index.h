@@ -53,16 +53,18 @@ struct HNSWSearchResult {
 
 class HNSWIndex {
 public:
-  static constexpr uint32_t MAGIC = 0x51565244;  // "DRVQ" in little-endian
+  static constexpr uint32_t MAGIC = 0x51565244;  // "QVRD" (QuiverDB) in little-endian
   static constexpr uint32_t VERSION = 1;
+  static constexpr int MAX_LEVEL = 32;  // Reasonable upper bound for HNSW levels
 
   explicit HNSWIndex(size_t dimension, HNSWDistanceMetric metric = HNSWDistanceMetric::L2,
       size_t max_elements = 100000, size_t M = 16, size_t ef_construction = 200, uint32_t seed = 42)
       : dim_(dimension), metric_(metric), max_elements_(max_elements), M_(M), M_max_(M),
         M_max0_(M * 2), ef_construction_(std::max(ef_construction, M)), ef_search_(50),
-        mult_(1.0 / std::log(static_cast<double>(M))), level_gen_(seed), ep_(-1), max_level_(-1) {
+        mult_(M > 1 ? 1.0 / std::log(static_cast<double>(M)) : 1.0), level_gen_(seed), ep_(-1), max_level_(-1) {
     if (dimension == 0) throw std::invalid_argument("Dimension must be > 0");
     if (max_elements == 0) throw std::invalid_argument("max_elements must be > 0");
+    if (M < 2) throw std::invalid_argument("M must be >= 2");
     if (max_elements > SIZE_MAX / dim_) throw std::invalid_argument("max_elements * dimension overflow");
     vectors_.resize(max_elements * dim_);
     ext_ids_.resize(max_elements);
@@ -238,31 +240,49 @@ public:
     idx->mult_ = mult;
 
     size_t cnt;
-    detail::read_bin(f, cnt); idx->count_ = cnt;
+    detail::read_bin(f, cnt);
+    if (cnt > max_el) throw std::runtime_error("Corrupted file: count exceeds max_elements");
+    idx->count_ = cnt;
     detail::read_bin(f, idx->ep_);
     detail::read_bin(f, idx->max_level_);
+    // Validate ep_ and max_level_ for non-empty index
+    if (cnt > 0) {
+      if (idx->ep_ >= cnt) throw std::runtime_error("Corrupted file: invalid entry point");
+      if (idx->max_level_ < 0 || idx->max_level_ > MAX_LEVEL)
+        throw std::runtime_error("Corrupted file: invalid max_level");
+    }
     detail::read_vec(f, idx->vectors_);
     detail::read_vec(f, idx->ext_ids_);
     detail::read_vec(f, idx->levels_);
 
     size_t msz;
     detail::read_bin(f, msz);
+    if (msz > cnt) throw std::runtime_error("Corrupted file: id_map size exceeds count");
     idx->id_map_.reserve(msz);
     for (size_t i = 0; i < msz; ++i) {
       uint64_t k; size_t v;
       detail::read_bin(f, k);
       detail::read_bin(f, v);
+      if (v >= cnt) throw std::runtime_error("Corrupted file: invalid internal index in id_map");
       idx->id_map_[k] = v;
     }
 
     size_t nsz;
     detail::read_bin(f, nsz);
+    if (nsz > max_el) throw std::runtime_error("Corrupted file: neighbors size exceeds max_elements");
     idx->neighbors_.resize(nsz);
     for (size_t i = 0; i < nsz; ++i) {
       size_t lsz;
       detail::read_bin(f, lsz);
+      if (lsz > static_cast<size_t>(MAX_LEVEL) + 1) throw std::runtime_error("Corrupted file: too many levels");
       idx->neighbors_[i].resize(lsz);
-      for (size_t l = 0; l < lsz; ++l) detail::read_vec(f, idx->neighbors_[i][l]);
+      for (size_t l = 0; l < lsz; ++l) {
+        detail::read_vec(f, idx->neighbors_[i][l]);
+        // Validate neighbor indices are within bounds
+        for (size_t nid : idx->neighbors_[i][l]) {
+          if (nid >= cnt) throw std::runtime_error("Corrupted file: invalid neighbor index");
+        }
+      }
     }
 
     idx->locks_.clear();
@@ -276,7 +296,8 @@ private:
 
   int get_level() {
     std::uniform_real_distribution<double> d(0.0, 1.0);
-    return static_cast<int>(-std::log(d(level_gen_)) * mult_);
+    int level = static_cast<int>(-std::log(d(level_gen_)) * mult_);
+    return std::min(level, MAX_LEVEL);
   }
 
   const float* get_vec(size_t iid) const { return vectors_.data() + iid * dim_; }
@@ -322,7 +343,7 @@ private:
     return res;
   }
 
-  std::vector<size_t> select_neighbors(MaxHeap& cands, size_t M, int) const {
+  std::vector<size_t> select_neighbors(MaxHeap& cands, size_t M, int /*level*/) const {
     if (cands.size() <= M) {
       std::vector<size_t> r;
       r.reserve(cands.size());
@@ -345,9 +366,9 @@ private:
     }
     if (r.size() < M) {
       std::unordered_set<size_t> sel(r.begin(), r.end());
-      for (auto& [_, id] : sorted) {
+      for (auto& p : sorted) {
         if (r.size() >= M) break;
-        if (!sel.count(id)) r.push_back(id);
+        if (!sel.count(p.second)) r.push_back(p.second);
       }
     }
     return r;

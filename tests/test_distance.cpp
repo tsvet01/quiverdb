@@ -2,6 +2,8 @@
 #include "core/distance.h"
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <cmath>
+#include <limits>
 #include <random>
 #include <vector>
 
@@ -148,6 +150,13 @@ TEST_CASE("cosine_distance", "[distance]") {
     REQUIRE(quiverdb::cosine_distance(a, b, 3) == Approx(1.0f));
   }
 
+  SECTION("both zero vectors") {
+    float a[] = {0.0f, 0.0f, 0.0f};
+    float b[] = {0.0f, 0.0f, 0.0f};
+    // When both vectors are zero, denominator is zero, should return 1.0
+    REQUIRE(quiverdb::cosine_distance(a, b, 3) == Approx(1.0f));
+  }
+
   SECTION("general") {
     float a[] = {1.0f, 2.0f, 3.0f};
     float b[] = {4.0f, 5.0f, 6.0f};
@@ -179,5 +188,45 @@ TEST_CASE("cosine_distance", "[distance]") {
     float r = quiverdb::cosine_distance(a.data(), b.data(), 773);
     REQUIRE(r >= 0.0f);
     REQUIRE(r <= 2.0f);
+  }
+}
+
+TEST_CASE("distance - special float values", "[distance]") {
+  SECTION("NaN input to l2_sq") {
+    float nan_vec[] = {std::numeric_limits<float>::quiet_NaN(), 1.0f, 2.0f};
+    float normal[] = {1.0f, 2.0f, 3.0f};
+    float result = quiverdb::l2_sq(nan_vec, normal, 3);
+    // Result should be NaN when input contains NaN
+    REQUIRE(std::isnan(result));
+  }
+
+  SECTION("Infinity input to l2_sq") {
+    float inf_vec[] = {std::numeric_limits<float>::infinity(), 1.0f, 2.0f};
+    float normal[] = {1.0f, 2.0f, 3.0f};
+    float result = quiverdb::l2_sq(inf_vec, normal, 3);
+    // Result should be infinity when input contains infinity
+    REQUIRE(std::isinf(result));
+  }
+
+  SECTION("NaN input to dot_product") {
+    float nan_vec[] = {std::numeric_limits<float>::quiet_NaN(), 1.0f, 2.0f};
+    float normal[] = {1.0f, 2.0f, 3.0f};
+    float result = quiverdb::dot_product(nan_vec, normal, 3);
+    REQUIRE(std::isnan(result));
+  }
+
+  SECTION("NaN input to cosine_distance") {
+    float nan_vec[] = {std::numeric_limits<float>::quiet_NaN(), 1.0f, 2.0f};
+    float normal[] = {1.0f, 2.0f, 3.0f};
+    float result = quiverdb::cosine_distance(nan_vec, normal, 3);
+    // Cosine with NaN should produce NaN or return the fallback value
+    REQUIRE((std::isnan(result) || result == 1.0f));
+  }
+
+  SECTION("Negative infinity") {
+    float neg_inf[] = {-std::numeric_limits<float>::infinity(), 1.0f, 2.0f};
+    float normal[] = {1.0f, 2.0f, 3.0f};
+    float result = quiverdb::l2_sq(neg_inf, normal, 3);
+    REQUIRE(std::isinf(result));
   }
 }

@@ -3,7 +3,9 @@
 
 #if defined(_WIN32) || defined(_WIN64)
 #define QUIVERDB_WINDOWS 1
+#ifndef NOMINMAX
 #define NOMINMAX  // Prevent Windows.h from defining min/max macros
+#endif
 #include <windows.h>
 #else
 #define QUIVERDB_POSIX 1
@@ -78,12 +80,23 @@ public:
     if (met > 2) { cleanup(); throw std::runtime_error("Invalid metric"); }
     metric_ = static_cast<DistanceMetric>(met);
 
-    if (num_vectors_ > SIZE_MAX / sizeof(uint64_t) ||
-        dim_ > SIZE_MAX / sizeof(float) ||
-        (num_vectors_ > 0 && num_vectors_ > SIZE_MAX / (dim_ * sizeof(float)))) {
+    // Check for overflow in size calculations step by step
+    if (num_vectors_ > SIZE_MAX / sizeof(uint64_t)) {
       cleanup(); throw std::runtime_error("File corrupted: size overflow");
     }
-    size_t expected = HEADER_SIZE + num_vectors_ * sizeof(uint64_t) + num_vectors_ * dim_ * sizeof(float);
+    if (dim_ > SIZE_MAX / sizeof(float)) {
+      cleanup(); throw std::runtime_error("File corrupted: size overflow");
+    }
+    size_t vec_bytes_per = dim_ * sizeof(float);  // Safe due to check above
+    if (num_vectors_ > 0 && num_vectors_ > SIZE_MAX / vec_bytes_per) {
+      cleanup(); throw std::runtime_error("File corrupted: size overflow");
+    }
+    size_t ids_size = num_vectors_ * sizeof(uint64_t);
+    size_t vecs_size = num_vectors_ * vec_bytes_per;
+    if (ids_size > SIZE_MAX - HEADER_SIZE || vecs_size > SIZE_MAX - HEADER_SIZE - ids_size) {
+      cleanup(); throw std::runtime_error("File corrupted: size overflow");
+    }
+    size_t expected = HEADER_SIZE + ids_size + vecs_size;
     if (file_size_ < expected) { cleanup(); throw std::runtime_error("File truncated"); }
 
     ids_ptr_ = reinterpret_cast<const uint64_t*>(static_cast<const uint8_t*>(mapped_) + HEADER_SIZE);

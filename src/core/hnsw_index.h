@@ -19,6 +19,10 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#if defined(__unix__) || defined(__APPLE__)
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace quiverdb {
 
@@ -58,6 +62,7 @@ public:
   static constexpr uint32_t MAGIC = 0x51565244;  // "QVRD" (QuiverDB) in little-endian
   static constexpr uint32_t VERSION = 2;  // v2: added RNG state serialization
   static constexpr int MAX_LEVEL = 32;  // Reasonable upper bound for HNSW levels
+  static constexpr size_t INVALID_ID = static_cast<size_t>(-1);  // Sentinel for empty entry point
 
   explicit HNSWIndex(size_t dimension, HNSWDistanceMetric metric = HNSWDistanceMetric::L2,
       size_t max_elements = 100000, size_t M = 16, size_t ef_construction = 200, uint32_t seed = 42)
@@ -93,7 +98,7 @@ public:
     for (int l = 0; l <= level; ++l)
       neighbors_[iid][l].reserve(l == 0 ? M_max0_ : M_max_);
 
-    if (ep_.load() == static_cast<size_t>(-1)) { ep_.store(iid); max_level_.store(level); return; }
+    if (ep_.load() == INVALID_ID) { ep_.store(iid); max_level_.store(level); return; }
 
     size_t curr = ep_.load();
     int cur_max_level = max_level_.load();
@@ -216,7 +221,7 @@ public:
       detail::write_vec(f, ext_ids_);
       detail::write_vec(f, levels_);
       detail::write_bin(f, id_map_.size());
-      for (auto& [k, v] : id_map_) { detail::write_bin(f, k); detail::write_bin(f, v); }
+      for (const auto& [k, v] : id_map_) { detail::write_bin(f, k); detail::write_bin(f, v); }
       detail::write_bin(f, neighbors_.size());
       for (size_t i = 0; i < neighbors_.size(); ++i) {
         detail::write_bin(f, neighbors_[i].size());
@@ -228,8 +233,14 @@ public:
       std::string rng_state = rng_ss.str();
       detail::write_bin(f, rng_state.size());
       f.write(rng_state.data(), rng_state.size());
-      f.close();
+      f.flush();
       if (!f) { std::filesystem::remove(tmp); throw std::runtime_error("Write failed: " + tmp); }
+#if defined(__unix__) || defined(__APPLE__)
+      // fsync for durability before atomic rename
+      int fd = open(tmp.c_str(), O_RDONLY);
+      if (fd >= 0) { fsync(fd); close(fd); }
+#endif
+      f.close();
       std::filesystem::rename(tmp, filename);
     } catch (...) { f.close(); std::filesystem::remove(tmp); throw; }
   }
@@ -417,7 +428,7 @@ private:
   std::unordered_map<uint64_t, size_t> id_map_;
   std::vector<int> levels_;
   std::vector<std::vector<std::vector<size_t>>> neighbors_;
-  std::atomic<size_t> ep_{static_cast<size_t>(-1)};
+  std::atomic<size_t> ep_{INVALID_ID};
   std::atomic<int> max_level_{-1};
   std::atomic<size_t> count_{0};
   mutable std::shared_mutex global_mtx_;

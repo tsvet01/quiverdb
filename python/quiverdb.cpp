@@ -10,17 +10,6 @@
 namespace py = pybind11;
 using namespace quiverdb;
 
-// Define a Python-friendly representation of HNSWSearchResult
-struct PyHNSWSearchResult {
-    uint64_t id;
-    float distance;
-
-    // For printing in Python
-    std::string toString() const {
-        return "HNSWSearchResult(id=" + std::to_string(id) + ", distance=" + std::to_string(distance) + ")";
-    }
-};
-
 PYBIND11_MODULE(quiverdb_py, m) {
     m.doc() = "QuiverDB - Embeddable vector database for edge AI";
 
@@ -36,12 +25,6 @@ PYBIND11_MODULE(quiverdb_py, m) {
         .value("COSINE", HNSWDistanceMetric::COSINE)
         .value("DOT", HNSWDistanceMetric::DOT)
         .export_values(); // Exports enum values to the module scope
-
-    // Bind HNSWSearchResult struct
-    py::class_<PyHNSWSearchResult>(m, "HNSWSearchResult")
-        .def_readwrite("id", &PyHNSWSearchResult::id)
-        .def_readwrite("distance", &PyHNSWSearchResult::distance)
-        .def("__repr__", &PyHNSWSearchResult::toString);
 
     // Bind HNSWIndex class
     py::class_<HNSWIndex>(m, "HNSWIndex")
@@ -215,6 +198,7 @@ PYBIND11_MODULE(quiverdb_py, m) {
                 if (static_cast<size_t>(buf.size) != self.dimension()) {
                     throw std::runtime_error("Vector dimension mismatch");
                 }
+                py::gil_scoped_release release;
                 return self.update(id, static_cast<const float*>(buf.ptr));
             },
             py::arg("id"), py::arg("vector"),

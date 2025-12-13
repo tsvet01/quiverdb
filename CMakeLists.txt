@@ -45,7 +45,9 @@ option(QUIVERDB_COVERAGE "Build with code coverage instrumentation" OFF)
 # Fetch dependencies
 include(FetchContent)
 
-# Google Benchmark
+# Benchmarks
+if(QUIVERDB_BUILD_BENCHMARKS)
+# Google Benchmark (only fetch if building benchmarks)
 FetchContent_Declare(
   benchmark
   GIT_REPOSITORY https://github.com/google/benchmark.git
@@ -53,9 +55,6 @@ FetchContent_Declare(
 )
 set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(benchmark)
-
-# Benchmarks
-if(QUIVERDB_BUILD_BENCHMARKS)
 add_executable(bench_distance benchmarks/bench_distance.cpp)
 target_link_libraries(bench_distance PRIVATE quiverdb benchmark::benchmark)
 target_compile_options(bench_distance PRIVATE

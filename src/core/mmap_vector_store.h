@@ -235,7 +235,13 @@ public:
     f.write(reinterpret_cast<const char*>(&reserved), 4);
     f.write(reinterpret_cast<const char*>(ids_.data()), ids_.size() * sizeof(uint64_t));
     f.write(reinterpret_cast<const char*>(vectors_.data()), vectors_.size() * sizeof(float));
+    f.flush();
     if (!f) { std::remove(tmp.c_str()); throw std::runtime_error("Write failed"); }
+#ifdef QUIVERDB_POSIX
+    // fsync for durability before atomic rename
+    int fd = open(tmp.c_str(), O_RDONLY);
+    if (fd >= 0) { fsync(fd); close(fd); }
+#endif
     f.close();
     if (std::rename(tmp.c_str(), filename.c_str()) != 0) {
       std::remove(tmp.c_str()); throw std::runtime_error("Rename failed");

@@ -30,14 +30,15 @@ Embeddable vector database for edge AI. Header-only C++20, SIMD-optimized, cross
 ## Structure
 ```
 src/core/
-├── distance.h           # SIMD distance (132 lines)
-├── vector_store.h       # Brute-force k-NN (127 lines)
-├── hnsw_index.h         # HNSW ANN (368 lines)
-├── mmap_vector_store.h  # Memory-mapped (239 lines)
+├── distance.h           # SIMD distance functions
+├── vector_store.h       # Brute-force k-NN
+├── hnsw_index.h         # HNSW approximate NN
+├── mmap_vector_store.h  # Memory-mapped store
 └── gpu/
-    ├── metal_distance.h # Metal compute (140 lines)
-    └── cuda_distance.cuh # CUDA kernels (106 lines)
+    ├── metal_distance.h # Metal compute
+    └── cuda_distance.cuh # CUDA kernels
 ```
+~1,000 lines of core code total.
 
 ## Build
 ```bash

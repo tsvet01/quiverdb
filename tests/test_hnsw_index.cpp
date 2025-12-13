@@ -581,3 +581,101 @@ TEST_CASE("HNSWIndex - recall benchmark", "[hnsw][.benchmark]") {
     REQUIRE(avg_recall > 0.5);  // Should have at least 50% recall
   }
 }
+
+TEST_CASE("HNSWIndex - ef_search validation", "[hnsw]") {
+  constexpr size_t dim = 16;
+  quiverdb::HNSWIndex index(dim, quiverdb::HNSWDistanceMetric::L2, 100);
+
+  SECTION("ef_search = 0 throws") {
+    REQUIRE_THROWS_AS(index.set_ef_search(0), std::invalid_argument);
+  }
+
+  SECTION("Valid ef_search values succeed") {
+    REQUIRE_NOTHROW(index.set_ef_search(1));
+    REQUIRE(index.get_ef_search() == 1);
+
+    REQUIRE_NOTHROW(index.set_ef_search(100));
+    REQUIRE(index.get_ef_search() == 100);
+
+    REQUIRE_NOTHROW(index.set_ef_search(10000));
+    REQUIRE(index.get_ef_search() == 10000);
+  }
+}
+
+TEST_CASE("HNSWIndex - get_vector edge cases", "[hnsw]") {
+  constexpr size_t dim = 8;
+  quiverdb::HNSWIndex index(dim, quiverdb::HNSWDistanceMetric::L2, 100);
+
+  SECTION("get_vector on non-existent ID throws") {
+    REQUIRE_THROWS_AS(index.get_vector(42), std::runtime_error);
+  }
+
+  SECTION("get_vector on empty index throws") {
+    REQUIRE_THROWS_AS(index.get_vector(0), std::runtime_error);
+  }
+
+  SECTION("get_vector returns correct vector") {
+    std::vector<float> original = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f};
+    index.add(42, original.data());
+
+    std::vector<float> retrieved = index.get_vector(42);
+    REQUIRE(retrieved.size() == dim);
+    for (size_t i = 0; i < dim; ++i) {
+      REQUIRE(retrieved[i] == Approx(original[i]).margin(1e-6f));
+    }
+  }
+}
+
+TEST_CASE("HNSWIndex - corrupted RNG state", "[hnsw][serialization]") {
+  const std::string filename = "test_hnsw_rng_corrupt.bin";
+  constexpr size_t dim = 8;
+
+  // Create and save a valid index
+  quiverdb::HNSWIndex original(dim, quiverdb::HNSWDistanceMetric::L2, 50);
+  std::vector<float> vec(dim, 1.0f);
+  original.add(1, vec.data());
+  original.save(filename);
+
+  SECTION("Loading file with corrupted RNG state throws") {
+    // Read the file content
+    std::ifstream ifs(filename, std::ios::binary);
+    std::vector<char> data((std::istreambuf_iterator<char>(ifs)),
+                            std::istreambuf_iterator<char>());
+    ifs.close();
+
+    // The RNG state is serialized near the end as a string stream
+    // We corrupt it by truncating the file before RNG state is complete
+    size_t corrupt_size = data.size() - 100; // Truncate last 100 bytes
+    if (corrupt_size > 0) {
+      std::string corrupt_file = filename + "_rng_corrupt";
+      std::ofstream ofs(corrupt_file, std::ios::binary);
+      ofs.write(data.data(), corrupt_size);
+      ofs.close();
+
+      REQUIRE_THROWS(quiverdb::HNSWIndex::load(corrupt_file));
+      std::filesystem::remove(corrupt_file);
+    }
+  }
+
+  std::filesystem::remove(filename);
+}
+
+TEST_CASE("HNSWIndex - contains edge cases", "[hnsw]") {
+  constexpr size_t dim = 8;
+  quiverdb::HNSWIndex index(dim, quiverdb::HNSWDistanceMetric::L2, 100);
+
+  SECTION("contains returns false for empty index") {
+    REQUIRE_FALSE(index.contains(0));
+    REQUIRE_FALSE(index.contains(1));
+    REQUIRE_FALSE(index.contains(999));
+  }
+
+  SECTION("contains returns true after add") {
+    std::vector<float> vec(dim, 1.0f);
+    index.add(42, vec.data());
+
+    REQUIRE(index.contains(42));
+    REQUIRE_FALSE(index.contains(0));
+    REQUIRE_FALSE(index.contains(43));
+  }
+}

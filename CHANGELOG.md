@@ -27,11 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Python bindings via pybind11
   - NumPy array support
   - All index types and distance metrics
-- Comprehensive test suite (31 C++ tests, 28 Python tests)
+- Comprehensive test suite (35 C++ tests, 28 Python tests)
 - Google Benchmark performance tests
 - Multi-platform CI/CD (Linux, macOS, Windows, iOS, Android)
   - GCC, Clang, MSVC compilers
-  - ARM64 QEMU testing
+  - Native ARM64 testing
   - iOS arm64 builds (Xcode)
   - Android arm64-v8a and x86_64 builds (NDK)
   - AddressSanitizer and UBSan checks

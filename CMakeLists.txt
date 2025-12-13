@@ -60,21 +60,21 @@ add_executable(bench_distance benchmarks/bench_distance.cpp)
 target_link_libraries(bench_distance PRIVATE quiverdb benchmark::benchmark)
 target_compile_options(bench_distance PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /arch:AVX2>
-  $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>,$<BOOL:${QUIVERDB_X86_64}>>:-mavx2>
+  $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>,$<BOOL:${QUIVERDB_X86_64}>>:-mavx2 -mfma>
 )
 
 add_executable(bench_vector_store benchmarks/bench_vector_store.cpp)
 target_link_libraries(bench_vector_store PRIVATE quiverdb benchmark::benchmark)
 target_compile_options(bench_vector_store PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /arch:AVX2>
-  $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>,$<BOOL:${QUIVERDB_X86_64}>>:-mavx2>
+  $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>,$<BOOL:${QUIVERDB_X86_64}>>:-mavx2 -mfma>
 )
 
 add_executable(bench_hnsw_index benchmarks/bench_hnsw_index.cpp)
 target_link_libraries(bench_hnsw_index PRIVATE quiverdb benchmark::benchmark)
 target_compile_options(bench_hnsw_index PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /arch:AVX2>
-  $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>,$<BOOL:${QUIVERDB_X86_64}>>:-mavx2>
+  $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>,$<BOOL:${QUIVERDB_X86_64}>>:-mavx2 -mfma>
 )
 endif() # QUIVERDB_BUILD_BENCHMARKS
 
@@ -115,7 +115,7 @@ add_executable(test_hnsw_index tests/test_hnsw_index.cpp)
 target_link_libraries(test_hnsw_index PRIVATE quiverdb Catch2::Catch2WithMain)
 target_compile_options(test_hnsw_index PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /arch:AVX2>
-  $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>,$<BOOL:${QUIVERDB_X86_64}>>:-mavx2>
+  $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>,$<BOOL:${QUIVERDB_X86_64}>>:-mavx2 -mfma>
   ${COVERAGE_COMPILE_FLAGS}
 )
 target_link_options(test_hnsw_index PRIVATE ${COVERAGE_LINK_FLAGS})
@@ -186,7 +186,7 @@ if(QUIVERDB_BUILD_PYTHON)
   target_link_libraries(quiverdb_py PRIVATE quiverdb pybind11::module)
   target_compile_options(quiverdb_py PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /arch:AVX2>
-    $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>,$<BOOL:${QUIVERDB_X86_64}>>:-mavx2>
+    $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>,$<BOOL:${QUIVERDB_X86_64}>>:-mavx2 -mfma>
   )
 endif() # QUIVERDB_BUILD_PYTHON
 

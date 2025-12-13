@@ -184,7 +184,10 @@ public:
     return res;
   }
 
-  void set_ef_search(size_t ef) { ef_search_ = ef; }
+  void set_ef_search(size_t ef) {
+    if (ef == 0) throw std::invalid_argument("ef_search must be > 0");
+    ef_search_ = ef;
+  }
   size_t get_ef_search() const { return ef_search_; }
   size_t size() const { std::shared_lock lk(global_mtx_); return count_; }
   size_t dimension() const { return dim_; }
@@ -340,7 +343,8 @@ private:
 
   int get_level() {
     std::uniform_real_distribution<double> d(0.0, 1.0);
-    int level = static_cast<int>(-std::log(d(level_gen_)) * mult_);
+    double r = std::max(d(level_gen_), 1e-9);  // Clamp to prevent log overflow
+    int level = static_cast<int>(-std::log(r) * mult_);
     return std::min(level, MAX_LEVEL);
   }
 

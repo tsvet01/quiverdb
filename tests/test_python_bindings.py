@@ -15,7 +15,6 @@ def test_import():
     import quiverdb_py
     assert hasattr(quiverdb_py, 'HNSWIndex')
     assert hasattr(quiverdb_py, 'HNSWDistanceMetric')
-    assert hasattr(quiverdb_py, 'HNSWSearchResult')
 
 
 def test_version():

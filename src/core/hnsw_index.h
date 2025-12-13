@@ -13,6 +13,7 @@
 #include <queue>
 #include <random>
 #include <shared_mutex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -33,6 +34,7 @@ template <typename T> void write_vec(std::ofstream& f, const std::vector<T>& v) 
   if (!v.empty()) f.write(reinterpret_cast<const char*>(v.data()), v.size() * sizeof(T));
 }
 constexpr size_t MAX_VEC_SIZE = 100000000ULL;
+constexpr size_t MAX_RNG_STATE_SIZE = 10000;  // Reasonable upper bound for serialized RNG state
 template <typename T> void read_vec(std::ifstream& f, std::vector<T>& v) {
   size_t sz; read_bin(f, sz);
   if (sz > MAX_VEC_SIZE || sz > SIZE_MAX / sizeof(T))
@@ -54,14 +56,14 @@ struct HNSWSearchResult {
 class HNSWIndex {
 public:
   static constexpr uint32_t MAGIC = 0x51565244;  // "QVRD" (QuiverDB) in little-endian
-  static constexpr uint32_t VERSION = 1;
+  static constexpr uint32_t VERSION = 2;  // v2: added RNG state serialization
   static constexpr int MAX_LEVEL = 32;  // Reasonable upper bound for HNSW levels
 
   explicit HNSWIndex(size_t dimension, HNSWDistanceMetric metric = HNSWDistanceMetric::L2,
       size_t max_elements = 100000, size_t M = 16, size_t ef_construction = 200, uint32_t seed = 42)
       : dim_(dimension), metric_(metric), max_elements_(max_elements), M_(M), M_max_(M),
         M_max0_(M * 2), ef_construction_(std::max(ef_construction, M)), ef_search_(50),
-        mult_(M > 1 ? 1.0 / std::log(static_cast<double>(M)) : 1.0), level_gen_(seed), ep_(-1), max_level_(-1) {
+        mult_(M > 1 ? 1.0 / std::log(static_cast<double>(M)) : 1.0), level_gen_(seed) {
     if (dimension == 0) throw std::invalid_argument("Dimension must be > 0");
     if (max_elements == 0) throw std::invalid_argument("max_elements must be > 0");
     if (M < 2) throw std::invalid_argument("M must be >= 2");
@@ -91,12 +93,13 @@ public:
     for (int l = 0; l <= level; ++l)
       neighbors_[iid][l].reserve(l == 0 ? M_max0_ : M_max_);
 
-    if (ep_ == static_cast<size_t>(-1)) { ep_ = iid; max_level_ = level; return; }
+    if (ep_.load() == static_cast<size_t>(-1)) { ep_.store(iid); max_level_.store(level); return; }
 
-    size_t curr = ep_;
-    if (level < max_level_) {
+    size_t curr = ep_.load();
+    int cur_max_level = max_level_.load();
+    if (level < cur_max_level) {
       float d = dist(vec, get_vec(curr));
-      for (int l = max_level_; l > level; --l) {
+      for (int l = cur_max_level; l > level; --l) {
         bool changed = true;
         while (changed) {
           changed = false;
@@ -109,7 +112,7 @@ public:
       }
     }
 
-    for (int l = std::min(level, max_level_); l >= 0; --l) {
+    for (int l = std::min(level, cur_max_level); l >= 0; --l) {
       auto top = search_layer(vec, curr, ef_construction_, l);
       auto sel = select_neighbors(top, M_, l);
       { std::unique_lock lk(*locks_[iid]); neighbors_[iid][l] = std::move(sel); }
@@ -130,9 +133,17 @@ public:
           for (size_t i = 0; i < max_conn && i < cands.size(); ++i) nc.push_back(cands[i].second);
         }
       }
-      if (!top.empty()) curr = top.top().second;
+      // Use closest candidate (min distance) for next layer entry point
+      if (!top.empty()) {
+        std::pair<float, size_t> best = top.top();
+        while (!top.empty()) {
+          if (top.top().first < best.first) best = top.top();
+          top.pop();
+        }
+        curr = best.second;
+      }
     }
-    if (level > max_level_) { ep_ = iid; max_level_ = level; }
+    if (level > cur_max_level) { ep_.store(iid); max_level_.store(level); }
   }
 
   std::vector<HNSWSearchResult> search(const float* query, size_t k) const {
@@ -141,9 +152,9 @@ public:
     std::shared_lock glock(global_mtx_);
     if (count_ == 0) return {};
 
-    size_t curr = ep_;
+    size_t curr = ep_.load();
     float d = dist(query, get_vec(curr));
-    for (int l = max_level_; l > 0; --l) {
+    for (int l = max_level_.load(); l > 0; --l) {
       bool changed = true;
       while (changed) {
         changed = false;
@@ -199,8 +210,8 @@ public:
       detail::write_bin(f, ef_search_);
       detail::write_bin(f, mult_);
       detail::write_bin(f, count_.load());
-      detail::write_bin(f, ep_);
-      detail::write_bin(f, max_level_);
+      detail::write_bin(f, ep_.load());
+      detail::write_bin(f, max_level_.load());
       detail::write_vec(f, vectors_);
       detail::write_vec(f, ext_ids_);
       detail::write_vec(f, levels_);
@@ -211,6 +222,12 @@ public:
         detail::write_bin(f, neighbors_[i].size());
         for (size_t l = 0; l < neighbors_[i].size(); ++l) detail::write_vec(f, neighbors_[i][l]);
       }
+      // Save RNG state for deterministic behavior after load
+      std::stringstream rng_ss;
+      rng_ss << level_gen_;
+      std::string rng_state = rng_ss.str();
+      detail::write_bin(f, rng_state.size());
+      f.write(rng_state.data(), rng_state.size());
       f.close();
       if (!f) { std::filesystem::remove(tmp); throw std::runtime_error("Write failed: " + tmp); }
       std::filesystem::rename(tmp, filename);
@@ -224,7 +241,7 @@ public:
     detail::read_bin(f, magic);
     if (magic != MAGIC) throw std::runtime_error("Invalid magic");
     detail::read_bin(f, ver);
-    if (ver != VERSION) throw std::runtime_error("Unsupported version");
+    if (ver != VERSION && ver != 1) throw std::runtime_error("Unsupported version");
 
     size_t dim, max_el, M, ef_con, ef_s; uint32_t met; double mult;
     detail::read_bin(f, dim);
@@ -239,18 +256,21 @@ public:
     idx->ef_search_ = ef_s;
     idx->mult_ = mult;
 
-    size_t cnt;
+    size_t cnt, ep_val;
+    int max_level_val;
     detail::read_bin(f, cnt);
     if (cnt > max_el) throw std::runtime_error("Corrupted file: count exceeds max_elements");
-    idx->count_ = cnt;
-    detail::read_bin(f, idx->ep_);
-    detail::read_bin(f, idx->max_level_);
+    idx->count_.store(cnt);
+    detail::read_bin(f, ep_val);
+    detail::read_bin(f, max_level_val);
     // Validate ep_ and max_level_ for non-empty index
     if (cnt > 0) {
-      if (idx->ep_ >= cnt) throw std::runtime_error("Corrupted file: invalid entry point");
-      if (idx->max_level_ < 0 || idx->max_level_ > MAX_LEVEL)
+      if (ep_val >= cnt) throw std::runtime_error("Corrupted file: invalid entry point");
+      if (max_level_val < 0 || max_level_val > MAX_LEVEL)
         throw std::runtime_error("Corrupted file: invalid max_level");
     }
+    idx->ep_.store(ep_val);
+    idx->max_level_.store(max_level_val);
     detail::read_vec(f, idx->vectors_);
     detail::read_vec(f, idx->ext_ids_);
     detail::read_vec(f, idx->levels_);
@@ -284,6 +304,19 @@ public:
         }
       }
     }
+
+    // Restore RNG state for deterministic behavior (v2+)
+    if (ver >= 2) {
+      size_t rng_state_size;
+      detail::read_bin(f, rng_state_size);
+      if (rng_state_size > detail::MAX_RNG_STATE_SIZE)
+        throw std::runtime_error("Corrupted file: RNG state too large");
+      std::string rng_state(rng_state_size, '\0');
+      f.read(rng_state.data(), rng_state_size);
+      std::stringstream rng_ss(rng_state);
+      rng_ss >> idx->level_gen_;
+    }
+    // Note: v1 files don't have RNG state, level_gen_ keeps default initialization
 
     idx->locks_.clear();
     idx->locks_.reserve(max_el);
@@ -384,8 +417,8 @@ private:
   std::unordered_map<uint64_t, size_t> id_map_;
   std::vector<int> levels_;
   std::vector<std::vector<std::vector<size_t>>> neighbors_;
-  size_t ep_;
-  int max_level_;
+  std::atomic<size_t> ep_{static_cast<size_t>(-1)};
+  std::atomic<int> max_level_{-1};
   std::atomic<size_t> count_{0};
   mutable std::shared_mutex global_mtx_;
   mutable std::vector<std::unique_ptr<std::shared_mutex>> locks_;

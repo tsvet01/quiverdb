@@ -163,11 +163,16 @@ PYBIND11_MODULE(quiverdb_py, m) {
                 if (ptr == nullptr) {
                     return py::none();
                 }
+                // Create a copy to ensure memory safety - internal storage may reallocate
+                auto* vec_copy = new std::vector<float>(ptr, ptr + self.dimension());
+                auto capsule = py::capsule(vec_copy, [](void* p) {
+                    delete static_cast<std::vector<float>*>(p);
+                });
                 return py::array_t<float>(
-                    {self.dimension()},
+                    {vec_copy->size()},
                     {sizeof(float)},
-                    ptr,
-                    py::cast(&self)  // Keep store alive while array exists
+                    vec_copy->data(),
+                    capsule  // Prevents deallocation until array is destroyed
                 );
             },
             py::arg("id"),

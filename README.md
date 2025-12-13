@@ -1,13 +1,40 @@
-# quiverdb
+<div align="center">
+
+# 🏹 QuiverDB
+
+**Embeddable vector database for edge AI**
+
+*Lightning-fast semantic search that runs anywhere*
 
 [![Build and Test](https://github.com/tsvet01/quiverdb/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/tsvet01/quiverdb/actions/workflows/build-and-test.yml)
+[![codecov](https://codecov.io/gh/tsvet01/quiverdb/branch/main/graph/badge.svg)](https://codecov.io/gh/tsvet01/quiverdb)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
-[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
-[![Header Only](https://img.shields.io/badge/header--only-yes-green.svg)](https://en.wikipedia.org/wiki/Header-only)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20iOS%20%7C%20Android-lightgrey.svg)]()
 
-Embeddable vector database for edge AI. Lightning-fast semantic search that runs anywhere.
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg?logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/20)
+[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Header Only](https://img.shields.io/badge/header--only-yes-success.svg)](https://en.wikipedia.org/wiki/Header-only)
+
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20iOS%20%7C%20Android-lightgrey.svg)]()
+[![GitHub stars](https://img.shields.io/github/stars/tsvet01/quiverdb?style=social)](https://github.com/tsvet01/quiverdb/stargazers)
+
+</div>
+
+---
+
+## 📑 Table of Contents
+
+- [Why QuiverDB?](#why-quiverdb)
+- [Features](#-features)
+- [Performance](#-performance)
+- [Quick Start](#-quick-start)
+- [Python Bindings](#-python-bindings)
+- [Building and Running](#-building-and-running)
+- [Mobile Development](#-mobile-development)
+- [Architecture](#-architecture)
+- [CI/CD Pipeline](#-cicd-pipeline)
+- [Roadmap](#-roadmap)
+
+---
 
 ## Why QuiverDB?
 
@@ -21,19 +48,19 @@ Embeddable vector database for edge AI. Lightning-fast semantic search that runs
 
 **Perfect for**: Mobile AI apps, offline-first applications, Obsidian/Logseq plugins, edge devices, privacy-sensitive workloads.
 
-## Features
+## ✨ Features
 
-- **Compact**: Header-only C++ library (~1,300 lines), runs on mobile/edge devices
-- **Fast**: SIMD-optimized distance calculations (ARM NEON, x86 AVX2)
-- **Multiple distance metrics**: L2, cosine similarity, dot product
-- **Multiple index types**: Brute-force (exact), HNSW (approximate), Memory-mapped (large datasets)
-- **GPU acceleration**: Metal (Apple Silicon), CUDA (NVIDIA)
-- **Cross-platform**: Linux, macOS, Windows, iOS, Android (ARM64 and x86_64)
-- **Thread-safe**: Concurrent reads with `std::shared_mutex`
-- **Python bindings**: NumPy integration, GIL-safe operations
-- **Local-first**: No network required, complete privacy
+- **📦 Compact**: Header-only C++ library (~1,300 lines), runs on mobile/edge devices
+- **⚡ Fast**: SIMD-optimized distance calculations (ARM NEON, x86 AVX2)
+- **📐 Multiple distance metrics**: L2, cosine similarity, dot product
+- **🗂️ Multiple index types**: Brute-force (exact), HNSW (approximate), Memory-mapped (large datasets)
+- **🎮 GPU acceleration**: Metal (Apple Silicon), CUDA (NVIDIA)
+- **🌍 Cross-platform**: Linux, macOS, Windows, iOS, Android (ARM64 and x86_64)
+- **🔒 Thread-safe**: Concurrent reads with `std::shared_mutex`
+- **🐍 Python bindings**: NumPy integration, GIL-safe operations
+- **🏠 Local-first**: No network required, complete privacy
 
-## Performance
+## ⚡ Performance
 
 | Metric | Value | Platform |
 |--------|-------|----------|
@@ -44,7 +71,7 @@ Embeddable vector database for edge AI. Lightning-fast semantic search that runs
 | GPU Speedup | 4.7x at 500K vectors | Metal |
 | Throughput | 10M+ ops/sec | M-series Mac |
 
-## Quick Start
+## 🚀 Quick Start
 
 ### Distance Calculations
 ```cpp
@@ -124,7 +151,7 @@ quiverdb::MMapVectorStore store("vectors.bin");
 auto results = store.search(query, 5);
 ```
 
-## Python Bindings
+## 🐍 Python Bindings
 
 QuiverDB includes Python bindings for all index types.
 
@@ -171,7 +198,7 @@ mmap_store = quiverdb.MMapVectorStore("vectors.bin")  # Instant load
 ids, dists = mmap_store.search(vec, 10)
 ```
 
-## Building and Running
+## 🔧 Building and Running
 
 ### Prerequisites
 - CMake 3.20+
@@ -205,7 +232,7 @@ ctest --output-on-failure
 | `QUIVERDB_BUILD_METAL` | OFF | Build Metal GPU support (macOS) |
 | `QUIVERDB_BUILD_CUDA` | OFF | Build CUDA GPU support |
 
-## Mobile Development
+## 📱 Mobile Development
 
 ### iOS
 
@@ -238,7 +265,7 @@ cmake --build build-android --parallel
 
 Supported Android ABIs: `arm64-v8a` (ARM NEON), `x86_64` (AVX2).
 
-## Architecture
+## 🏗️ Architecture
 
 ```
 quiverdb/
@@ -250,12 +277,12 @@ quiverdb/
 │   └── gpu/
 │       ├── metal_distance.h # Metal compute shaders
 │       └── cuda_distance.cuh # CUDA kernels
-├── tests/                   # 30 C++ tests, 28 Python tests
+├── tests/                   # 31 C++ tests, 28 Python tests
 ├── benchmarks/              # Google Benchmark suite
 └── python/                  # pybind11 bindings
 ```
 
-## CI/CD Pipeline
+## 🔄 CI/CD Pipeline
 
 | Job | Platform | Description |
 |-----|----------|-------------|
@@ -267,7 +294,7 @@ quiverdb/
 | ios-build | macOS | iOS arm64 build |
 | android-build | Linux | Android arm64-v8a + x86_64 |
 
-## Known Limitations
+## ⚠️ Known Limitations
 
 Current v0.1.0 limitations (documented for transparency):
 
@@ -277,7 +304,7 @@ Current v0.1.0 limitations (documented for transparency):
 - **Single-file persistence**: Each index is a single file; no sharding for very large datasets.
 - **GPU requires dim%4==0**: Metal/CUDA kernels use float4 vectorization, requiring dimensions divisible by 4.
 
-## Roadmap
+## 🗺️ Roadmap
 
 - [ ] PyPI package distribution
 - [ ] npm/WebAssembly bindings
@@ -286,15 +313,15 @@ Current v0.1.0 limitations (documented for transparency):
 - [ ] Multi-vector queries (batch search)
 - [ ] Filtering/metadata support
 
-## Contributing
+## 🤝 Contributing
 
 Contributions welcome! Please read our contributing guidelines and submit PRs.
 
-## License
+## 📄 License
 
 MIT License - see [LICENSE](LICENSE) for details.
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 - [hnswlib](https://github.com/nmslib/hnswlib) - HNSW algorithm reference
 - [Google Benchmark](https://github.com/google/benchmark) - Benchmarking framework

@@ -51,7 +51,7 @@ cd build && ctest --output-on-failure
 - Linux: GCC, Clang
 - macOS: Apple Clang (ARM NEON)
 - Windows: MSVC (AVX2)
-- ARM64: QEMU emulation
+- ARM64: Native runners
 - iOS: Xcode arm64
 - Android: NDK arm64-v8a, x86_64
 - Python: 3 platforms x 2 versions

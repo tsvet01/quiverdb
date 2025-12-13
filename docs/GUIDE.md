@@ -260,7 +260,7 @@ quiverdb/
 | python-tests | All platforms, Python 3.9/3.11 | Python binding tests |
 | sanitizers | Linux | AddressSanitizer, UBSan |
 | coverage | Linux | Code coverage + Codecov |
-| linux-arm64 | Linux ARM64 (QEMU) | ARM NEON validation |
+| linux-arm64 | Linux ARM64 (Native) | ARM NEON validation |
 | ios-build | macOS | iOS arm64 build |
 | android-build | Linux | Android arm64-v8a + x86_64 |
 

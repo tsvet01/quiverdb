@@ -17,7 +17,7 @@ Embeddable vector database for edge AI. Header-only C++20, SIMD-optimized, cross
 | Mobile | iOS arm64, Android arm64-v8a/x86_64 |
 
 ### Test Coverage
-- 35 C++ test cases (1.9k+ assertions)
+- 36 C++ test cases (2.3k+ assertions)
 - 28 Python tests
 - 3 GPU tests (Metal)
 - Sanitizers: ASan + UBSan clean

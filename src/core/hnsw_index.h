@@ -31,7 +31,8 @@ template <typename T> void write_bin(std::ofstream& f, const T& v) {
   f.write(reinterpret_cast<const char*>(&v), sizeof(T));
 }
 template <typename T> void read_bin(std::ifstream& f, T& v) {
-  f.read(reinterpret_cast<char*>(&v), sizeof(T));
+  if (!f.read(reinterpret_cast<char*>(&v), sizeof(T)))
+    throw std::runtime_error("Unexpected end of file or read error");
 }
 template <typename T> void write_vec(std::ofstream& f, const std::vector<T>& v) {
   write_bin(f, v.size());
@@ -44,7 +45,8 @@ template <typename T> void read_vec(std::ifstream& f, std::vector<T>& v) {
   if (sz > MAX_VEC_SIZE || sz > SIZE_MAX / sizeof(T))
     throw std::runtime_error("Corrupted file: vector too large");
   v.resize(sz);
-  if (!v.empty()) f.read(reinterpret_cast<char*>(v.data()), sz * sizeof(T));
+  if (!v.empty() && !f.read(reinterpret_cast<char*>(v.data()), sz * sizeof(T)))
+    throw std::runtime_error("Unexpected end of file or read error");
 }
 } // namespace detail
 
@@ -277,11 +279,15 @@ public:
     idx->count_.store(cnt);
     detail::read_bin(f, ep_val);
     detail::read_bin(f, max_level_val);
-    // Validate ep_ and max_level_ for non-empty index
+    // Validate ep_ and max_level_
     if (cnt > 0) {
       if (ep_val >= cnt) throw std::runtime_error("Corrupted file: invalid entry point");
       if (max_level_val < 0 || max_level_val > MAX_LEVEL)
         throw std::runtime_error("Corrupted file: invalid max_level");
+    } else {
+      // Empty index must have invalid entry point
+      if (ep_val != INVALID_ID)
+        throw std::runtime_error("Corrupted file: non-empty entry point for empty index");
     }
     idx->ep_.store(ep_val);
     idx->max_level_.store(max_level_val);
@@ -326,7 +332,8 @@ public:
       if (rng_state_size > detail::MAX_RNG_STATE_SIZE)
         throw std::runtime_error("Corrupted file: RNG state too large");
       std::string rng_state(rng_state_size, '\0');
-      f.read(rng_state.data(), rng_state_size);
+      if (!f.read(rng_state.data(), rng_state_size))
+        throw std::runtime_error("Unexpected end of file or read error");
       std::stringstream rng_ss(rng_state);
       rng_ss >> idx->level_gen_;
       if (rng_ss.fail()) throw std::runtime_error("Corrupted file: invalid RNG state");

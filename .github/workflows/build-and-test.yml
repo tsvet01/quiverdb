@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+# Restrict permissions for security
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   build-and-test:
     name: ${{ matrix.os }} - ${{ matrix.compiler }}

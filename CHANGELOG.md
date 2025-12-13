@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Python bindings via pybind11
   - NumPy array support
   - All index types and distance metrics
-- Comprehensive test suite (35 C++ tests, 28 Python tests)
+- Comprehensive test suite (36 C++ tests, 28 Python tests)
 - Google Benchmark performance tests
 - Multi-platform CI/CD (Linux, macOS, Windows, iOS, Android)
   - GCC, Clang, MSVC compilers

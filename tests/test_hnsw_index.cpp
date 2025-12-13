@@ -344,6 +344,78 @@ TEST_CASE("HNSWIndex - concurrent search", "[hnsw][thread]") {
   }
 }
 
+TEST_CASE("HNSWIndex - concurrent add and search", "[hnsw][thread]") {
+  constexpr size_t dim = 32;
+  constexpr size_t initial_vectors = 100;
+  constexpr size_t max_elements = 1000;
+  quiverdb::HNSWIndex index(dim, quiverdb::HNSWDistanceMetric::L2, max_elements);
+
+  std::mt19937 gen(42);
+  std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
+
+  // Pre-populate with some vectors
+  for (uint64_t i = 0; i < initial_vectors; ++i) {
+    std::vector<float> vec(dim);
+    for (size_t j = 0; j < dim; ++j) vec[j] = dis(gen);
+    index.add(i, vec.data());
+  }
+
+  SECTION("Concurrent writers and readers") {
+    std::atomic<int> search_completed{0};
+    std::atomic<int> add_completed{0};
+    std::atomic<uint64_t> next_id{initial_vectors};
+    constexpr int num_readers = 4;
+    constexpr int num_writers = 2;
+    constexpr int searches_per_reader = 50;
+    constexpr int adds_per_writer = 50;
+
+    std::vector<std::thread> threads;
+    threads.reserve(num_readers + num_writers);
+
+    // Launch reader threads
+    for (int t = 0; t < num_readers; ++t) {
+      threads.emplace_back([&index, &search_completed, t]() {
+        std::mt19937 local_gen(t * 1000);
+        std::uniform_real_distribution<float> local_dis(-1.0f, 1.0f);
+
+        for (int i = 0; i < searches_per_reader; ++i) {
+          std::vector<float> query(dim);
+          for (size_t j = 0; j < dim; ++j) query[j] = local_dis(local_gen);
+          auto results = index.search(query.data(), 5);
+          // Results should be valid (may vary as index grows)
+          REQUIRE(results.size() <= 5);
+          REQUIRE(results.size() > 0);
+        }
+        ++search_completed;
+      });
+    }
+
+    // Launch writer threads
+    for (int t = 0; t < num_writers; ++t) {
+      threads.emplace_back([&index, &add_completed, &next_id, t]() {
+        std::mt19937 local_gen((t + 100) * 1000);
+        std::uniform_real_distribution<float> local_dis(-1.0f, 1.0f);
+
+        for (int i = 0; i < adds_per_writer; ++i) {
+          std::vector<float> vec(dim);
+          for (size_t j = 0; j < dim; ++j) vec[j] = local_dis(local_gen);
+          uint64_t id = next_id.fetch_add(1);
+          index.add(id, vec.data());
+        }
+        ++add_completed;
+      });
+    }
+
+    for (auto& t : threads) {
+      t.join();
+    }
+
+    REQUIRE(search_completed == num_readers);
+    REQUIRE(add_completed == num_writers);
+    REQUIRE(index.size() == initial_vectors + num_writers * adds_per_writer);
+  }
+}
+
 TEST_CASE("HNSWIndex - serialization", "[hnsw][serialization]") {
   const std::string filename = "test_hnsw_index.bin";
   constexpr size_t dim = 16;

@@ -329,6 +329,7 @@ public:
       f.read(rng_state.data(), rng_state_size);
       std::stringstream rng_ss(rng_state);
       rng_ss >> idx->level_gen_;
+      if (rng_ss.fail()) throw std::runtime_error("Corrupted file: invalid RNG state");
     }
     // Note: v1 files don't have RNG state, level_gen_ keeps default initialization
 

@@ -214,26 +214,25 @@ jobs:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   linux-arm64:
-    name: Linux ARM64 (QEMU)
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    name: Linux ARM64 (Native)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
-      with:
-        platforms: arm64
+    - name: Configure CMake
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DQUIVERDB_BUILD_PYTHON=OFF
 
-    - name: Build and test on ARM64
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: .github/Dockerfile.arm64-test
-        platforms: linux/arm64
-        push: false
+    - name: Build
+      run: cmake --build build --parallel
+
+    - name: Run tests
+      run: ctest --test-dir build --output-on-failure
 
   ios-build:
     name: iOS (arm64)

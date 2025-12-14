@@ -267,6 +267,32 @@ TEST_CASE("MMapVectorStore - error handling", "[mmap]") {
     REQUIRE_THROWS_AS(quiverdb::MMapVectorStore(filename), std::runtime_error);
     std::filesystem::remove(filename);
   }
+
+  SECTION("Size overflow - combined dim*num_vectors overflow throws") {
+    // Test the combined overflow check: num_vectors * dim * sizeof(float) overflows
+    // even though each value individually passes earlier checks
+    const std::string filename = "test_overflow_combined.bin";
+    {
+      std::ofstream ofs(filename, std::ios::binary);
+      uint32_t magic = quiverdb::MMapVectorStore::MAGIC;
+      uint32_t version = 1;
+      // dim = SIZE_MAX/8 passes dim check (< SIZE_MAX/sizeof(float))
+      // num_vectors = 3 passes num_vectors check (< SIZE_MAX/sizeof(uint64_t))
+      // But dim * sizeof(float) * num_vectors = (SIZE_MAX/2) * 3 overflows
+      uint64_t dim = SIZE_MAX / 8;
+      uint64_t num_vectors = 3;
+      uint32_t metric = 0;
+      uint32_t reserved = 0;
+      ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+      ofs.write(reinterpret_cast<const char*>(&version), sizeof(version));
+      ofs.write(reinterpret_cast<const char*>(&dim), sizeof(dim));
+      ofs.write(reinterpret_cast<const char*>(&num_vectors), sizeof(num_vectors));
+      ofs.write(reinterpret_cast<const char*>(&metric), sizeof(metric));
+      ofs.write(reinterpret_cast<const char*>(&reserved), sizeof(reserved));
+    }
+    REQUIRE_THROWS_AS(quiverdb::MMapVectorStore(filename), std::runtime_error);
+    std::filesystem::remove(filename);
+  }
 }
 
 TEST_CASE("MMapVectorStore - search validation", "[mmap]") {
@@ -289,7 +315,7 @@ TEST_CASE("MMapVectorStore - search validation", "[mmap]") {
       float query[] = {1.0f, 0.0f, 0.0f, 0.0f};
       REQUIRE_THROWS_AS(store.search(query, 0), std::invalid_argument);
     }
-  }  // store destructor unmaps file before removal
+  }  // Scope ensures store is destroyed and file unmapped before removal (Windows file locking)
 
   std::filesystem::remove(filename);
 }

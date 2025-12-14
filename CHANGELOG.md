@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Windows file locking issue in mmap tests (scope store before file removal)
 - Type consistency in test file format (uint64_t for dimension field)
+- Coverage reporting now excludes test and benchmark files (measures only production code)
 
 ## [0.1.0] - 2025-12-07
 

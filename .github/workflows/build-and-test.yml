@@ -206,7 +206,7 @@ jobs:
     - name: Capture coverage
       run: |
         lcov --capture --directory build --output-file coverage.info --ignore-errors mismatch,negative
-        lcov --remove coverage.info '/usr/*' '*/external/*' '*/build/_deps/*' --output-file coverage.info --ignore-errors unused
+        lcov --remove coverage.info '/usr/*' '*/external/*' '*/build/_deps/*' '*/tests/*' '*/benchmarks/*' --output-file coverage.info --ignore-errors unused
         lcov --list coverage.info
 
     - name: Upload coverage to Codecov

@@ -245,17 +245,17 @@ public:
       f.write(rng_state.data(), rng_state.size());
       f.flush();
       if (!f) { std::filesystem::remove(tmp); throw std::runtime_error("Write failed: " + tmp); }
+      f.close();
 #if defined(_WIN32) || defined(_WIN64)
       // FlushFileBuffers for durability before atomic rename
-      HANDLE hFile = CreateFileA(tmp.c_str(), GENERIC_WRITE, 0, NULL,
+      HANDLE hFile = CreateFileA(tmp.c_str(), GENERIC_WRITE, FILE_SHARE_READ, NULL,
                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
       if (hFile != INVALID_HANDLE_VALUE) { FlushFileBuffers(hFile); CloseHandle(hFile); }
 #elif defined(__unix__) || defined(__APPLE__)
       // fsync for durability before atomic rename
-      int fd = open(tmp.c_str(), O_RDONLY);
+      int fd = open(tmp.c_str(), O_WRONLY);
       if (fd >= 0) { fsync(fd); close(fd); }
 #endif
-      f.close();
       std::filesystem::rename(tmp, filename);
     } catch (...) { f.close(); std::filesystem::remove(tmp); throw; }
   }

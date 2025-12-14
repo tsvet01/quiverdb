@@ -1,0 +1,20 @@
+FROM arm64v8/ubuntu:22.04
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    cmake \
+    g++ \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy source code
+WORKDIR /app
+COPY . .
+
+# Build
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
+    -DQUIVERDB_BUILD_PYTHON=OFF
+RUN cmake --build build --parallel
+
+# Run tests
+RUN cd build && ctest --output-on-failure

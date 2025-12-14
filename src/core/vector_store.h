@@ -1,10 +1,12 @@
+// QuiverDB - Copyright (c) 2025 Anton Tsvetkov - MIT License
 #pragma once
 #include "distance.h"
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -12,267 +14,124 @@
 
 namespace quiverdb {
 
-/**
- * @brief Distance metric type for vector search
- */
-enum class DistanceMetric {
-  L2,      ///< Squared L2 (Euclidean) distance
-  COSINE,  ///< Cosine distance
-  DOT      ///< Negative dot product (for maximum inner product search)
-};
+enum class DistanceMetric { L2, COSINE, DOT };
 
-/**
- * @brief Search result containing vector ID and distance
- */
 struct SearchResult {
-  uint64_t id;      ///< Vector ID
-  float distance;   ///< Distance to query vector
-
-  bool operator<(const SearchResult& other) const {
-    return distance < other.distance;
-  }
+  uint64_t id;
+  float distance;
+  bool operator<(const SearchResult& o) const { return distance < o.distance; }
 };
 
-/**
- * @brief In-memory vector database with k-NN search
- *
- * Stores vectors with associated IDs and supports efficient k-nearest neighbor
- * search using various distance metrics.
- *
- * Example usage:
- * @code
- * VectorStore store(768, DistanceMetric::COSINE);
- *
- * float vec1[768] = {...};
- * float vec2[768] = {...};
- * store.add(1, vec1);
- * store.add(2, vec2);
- *
- * float query[768] = {...};
- * auto results = store.search(query, 5); // Find 5 nearest neighbors
- * @endcode
- */
 class VectorStore {
 public:
-  /**
-   * @brief Constructs a new vector store
-   *
-   * @param dimension Dimension of vectors to store
-   * @param metric Distance metric to use for search
-   * @throws std::invalid_argument if dimension is 0
-   */
   explicit VectorStore(size_t dimension, DistanceMetric metric = DistanceMetric::L2)
       : dim_(dimension), metric_(metric) {
-    if (dimension == 0) {
-      throw std::invalid_argument("Dimension must be greater than 0");
-    }
+    if (dimension == 0) throw std::invalid_argument("Dimension must be > 0");
   }
 
-  /**
-   * @brief Adds a vector to the store
-   *
-   * @param id Unique identifier for the vector
-   * @param vector Pointer to vector data (must have dim elements)
-   * @throws std::invalid_argument if vector is null or ID already exists
-   */
   void add(uint64_t id, const float* vector) {
-    if (vector == nullptr) {
-      throw std::invalid_argument("Vector must not be null");
-    }
-
-    if (id_to_index_.find(id) != id_to_index_.end()) {
-      throw std::invalid_argument("Vector with ID " + std::to_string(id) + " already exists");
-    }
-
-    // Append vector data to flat buffer
-    size_t index = ids_.size();
+    if (!vector) throw std::invalid_argument("Vector must not be null");
+    std::unique_lock lock(mutex_);
+    if (id_to_index_.count(id)) throw std::invalid_argument("ID " + std::to_string(id) + " exists");
     vectors_data_.insert(vectors_data_.end(), vector, vector + dim_);
     ids_.push_back(id);
-    id_to_index_[id] = index;
+    id_to_index_[id] = ids_.size() - 1;
   }
 
-  /**
-   * @brief Removes a vector from the store
-   *
-   * @param id ID of vector to remove
-   * @return true if vector was removed, false if not found
-   */
   bool remove(uint64_t id) {
+    std::unique_lock lock(mutex_);
     auto it = id_to_index_.find(id);
-    if (it == id_to_index_.end()) {
-      return false;
+    if (it == id_to_index_.end()) return false;
+    size_t idx = it->second, last = ids_.size() - 1;
+    if (idx != last) {
+      std::copy_n(vectors_data_.data() + last * dim_, dim_, vectors_data_.data() + idx * dim_);
+      ids_[idx] = ids_[last];
+      id_to_index_[ids_[idx]] = idx;
     }
-
-    size_t index = it->second;
-    size_t last_index = ids_.size() - 1;
-
-    // Swap with last vector and pop
-    if (index != last_index) {
-      // Copy last vector's data over the removed vector's data
-      const float* last_vec = vectors_data_.data() + last_index * dim_;
-      float* removed_vec = vectors_data_.data() + index * dim_;
-      std::copy(last_vec, last_vec + dim_, removed_vec);
-
-      ids_[index] = ids_[last_index];
-      id_to_index_[ids_[index]] = index;
-    }
-
-    // Remove last vector's data
     vectors_data_.resize(vectors_data_.size() - dim_);
     ids_.pop_back();
     id_to_index_.erase(it);
-
     return true;
   }
 
-  /**
-   * @brief Gets a vector by ID
-   *
-   * @param id Vector ID
-   * @return Pointer to vector data, or nullptr if not found
-   */
+  // WARNING: Returned pointer invalidated by any write operation
   const float* get(uint64_t id) const {
+    std::shared_lock lock(mutex_);
     auto it = id_to_index_.find(id);
-    if (it == id_to_index_.end()) {
-      return nullptr;
-    }
-    return vectors_data_.data() + it->second * dim_;
+    return it == id_to_index_.end() ? nullptr : vectors_data_.data() + it->second * dim_;
   }
 
-  /**
-   * @brief Searches for k nearest neighbors
-   *
-   * @param query Query vector (must have dim elements)
-   * @param k Number of nearest neighbors to return
-   * @return Vector of search results, sorted by distance (closest first)
-   * @throws std::invalid_argument if query is null or k is 0
-   */
+  // Thread-safe: returns a copy of the vector (safe for concurrent access)
+  std::vector<float> get_copy(uint64_t id) const {
+    std::shared_lock lock(mutex_);
+    auto it = id_to_index_.find(id);
+    if (it == id_to_index_.end()) return {};
+    const float* ptr = vectors_data_.data() + it->second * dim_;
+    return std::vector<float>(ptr, ptr + dim_);
+  }
+
   std::vector<SearchResult> search(const float* query, size_t k) const {
-    if (query == nullptr) {
-      throw std::invalid_argument("Query vector must not be null");
-    }
-    if (k == 0) {
-      throw std::invalid_argument("k must be greater than 0");
-    }
-
-    // Compute all distances
-    size_t num_vectors = ids_.size();
+    if (!query) throw std::invalid_argument("Query must not be null");
+    if (k == 0) throw std::invalid_argument("k must be > 0");
+    std::shared_lock lock(mutex_);
     std::vector<SearchResult> results;
-    results.reserve(num_vectors);
-
-    const float* data_ptr = vectors_data_.data();
-    for (size_t i = 0; i < num_vectors; ++i) {
-      float dist = compute_distance(query, data_ptr + i * dim_);
-      results.push_back({ids_[i], dist});
-    }
-
-    // Partial sort to get k smallest distances
-    size_t num_results = std::min(k, results.size());
-    std::partial_sort(results.begin(),
-                     results.begin() + num_results,
-                     results.end());
-
-    // Return only k results
-    results.resize(num_results);
+    results.reserve(ids_.size());
+    for (size_t i = 0; i < ids_.size(); ++i)
+      results.push_back({ids_[i], compute_distance(query, vectors_data_.data() + i * dim_)});
+    size_t n = std::min(k, results.size());
+    std::partial_sort(results.begin(), results.begin() + n, results.end());
+    results.resize(n);
     return results;
   }
 
-  /**
-   * @brief Returns the number of vectors in the store
-   */
-  size_t size() const {
-    return ids_.size();
-  }
+  size_t size() const { std::shared_lock lock(mutex_); return ids_.size(); }
+  size_t dimension() const { return dim_; }
+  DistanceMetric metric() const { return metric_; }
 
-  /**
-   * @brief Returns the dimension of stored vectors
-   */
-  size_t dimension() const {
-    return dim_;
-  }
-
-  /**
-   * @brief Returns the distance metric being used
-   */
-  DistanceMetric metric() const {
-    return metric_;
-  }
-
-  /**
-   * @brief Clears all vectors from the store
-   */
   void clear() {
+    std::unique_lock lock(mutex_);
     vectors_data_.clear();
     ids_.clear();
     id_to_index_.clear();
   }
 
-  /**
-   * @brief Checks if a vector with given ID exists
-   */
   bool contains(uint64_t id) const {
-    return id_to_index_.find(id) != id_to_index_.end();
+    std::shared_lock lock(mutex_);
+    return id_to_index_.count(id);
   }
 
-  /**
-   * @brief Reserves space for a given number of vectors
-   *
-   * Pre-allocates memory to avoid reallocations during insertion.
-   * Useful when you know the approximate number of vectors in advance.
-   *
-   * @param capacity Number of vectors to reserve space for
-   */
   void reserve(size_t capacity) {
+    std::unique_lock lock(mutex_);
     vectors_data_.reserve(capacity * dim_);
     ids_.reserve(capacity);
     id_to_index_.reserve(capacity);
   }
 
-  /**
-   * @brief Updates an existing vector
-   *
-   * @param id ID of vector to update
-   * @param vector New vector data (must have dim elements)
-   * @return true if vector was updated, false if ID not found
-   * @throws std::invalid_argument if vector is null
-   */
   bool update(uint64_t id, const float* vector) {
-    if (vector == nullptr) {
-      throw std::invalid_argument("Vector must not be null");
-    }
-
+    if (!vector) throw std::invalid_argument("Vector must not be null");
+    std::unique_lock lock(mutex_);
     auto it = id_to_index_.find(id);
-    if (it == id_to_index_.end()) {
-      return false;
-    }
-
-    size_t index = it->second;
-    float* dest = vectors_data_.data() + index * dim_;
-    std::copy(vector, vector + dim_, dest);
+    if (it == id_to_index_.end()) return false;
+    std::copy_n(vector, dim_, vectors_data_.data() + it->second * dim_);
     return true;
   }
 
 private:
   float compute_distance(const float* a, const float* b) const {
     switch (metric_) {
-      case DistanceMetric::L2:
-        return l2_sq(a, b, dim_);
-      case DistanceMetric::COSINE:
-        return cosine_distance(a, b, dim_);
-      case DistanceMetric::DOT:
-        // For maximum inner product search, we negate the dot product
-        // so that larger dot products have smaller "distances"
-        return -dot_product(a, b, dim_);
-      default:
-        return std::numeric_limits<float>::infinity();
+      case DistanceMetric::L2: return l2_sq(a, b, dim_);
+      case DistanceMetric::COSINE: return cosine_distance(a, b, dim_);
+      case DistanceMetric::DOT: return -dot_product(a, b, dim_);
+      default: return std::numeric_limits<float>::infinity();
     }
   }
 
   size_t dim_;
   DistanceMetric metric_;
-  std::vector<float> vectors_data_;  // Flat buffer: [vec0_dim0, vec0_dim1, ..., vec1_dim0, vec1_dim1, ...]
+  std::vector<float> vectors_data_;
   std::vector<uint64_t> ids_;
   std::unordered_map<uint64_t, size_t> id_to_index_;
+  mutable std::shared_mutex mutex_;
 };
 
 } // namespace quiverdb

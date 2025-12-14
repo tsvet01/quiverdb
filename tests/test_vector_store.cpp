@@ -2,6 +2,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <random>
+#include <thread>
 #include <vector>
 
 using Catch::Approx;
@@ -381,5 +382,148 @@ TEST_CASE("VectorStore - stress test", "[vector_store][stress]") {
 
     auto results = store.search(query.data(), 10);
     REQUIRE(results.size() == 10);
+  }
+}
+
+TEST_CASE("VectorStore - concurrent access", "[vector_store][thread]") {
+  constexpr size_t dim = 64;
+  quiverdb::VectorStore store(dim, quiverdb::DistanceMetric::L2);
+
+  SECTION("Concurrent reads are safe") {
+    // Pre-populate store
+    std::mt19937 gen(42);
+    std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
+
+    for (uint64_t i = 0; i < 100; ++i) {
+      std::vector<float> vec(dim);
+      for (size_t j = 0; j < dim; ++j) {
+        vec[j] = dis(gen);
+      }
+      store.add(i, vec.data());
+    }
+
+    // Launch multiple reader threads
+    std::vector<std::thread> readers;
+    std::atomic<int> successful_reads{0};
+
+    for (int t = 0; t < 4; ++t) {
+      readers.emplace_back([&store, &successful_reads]() {
+        constexpr size_t dim = 64;
+        std::mt19937 local_gen(std::random_device{}());
+        std::uniform_real_distribution<float> local_dis(-1.0f, 1.0f);
+
+        for (int i = 0; i < 100; ++i) {
+          // Concurrent search
+          std::vector<float> query(dim);
+          for (size_t j = 0; j < dim; ++j) {
+            query[j] = local_dis(local_gen);
+          }
+          auto results = store.search(query.data(), 5);
+          if (results.size() == 5) {
+            successful_reads++;
+          }
+
+          // Concurrent contains check
+          store.contains(static_cast<uint64_t>(i));
+
+          // Concurrent size check
+          store.size();
+        }
+      });
+    }
+
+    for (auto& t : readers) {
+      t.join();
+    }
+
+    REQUIRE(successful_reads == 400);
+  }
+
+  SECTION("Concurrent writes are safe") {
+    std::vector<std::thread> writers;
+    std::atomic<int> successful_writes{0};
+
+    for (int t = 0; t < 4; ++t) {
+      writers.emplace_back([&store, &successful_writes, t]() {
+        constexpr size_t dim = 64;
+        std::mt19937 local_gen(42 + t);
+        std::uniform_real_distribution<float> local_dis(-1.0f, 1.0f);
+
+        for (int i = 0; i < 25; ++i) {
+          std::vector<float> vec(dim);
+          for (size_t j = 0; j < dim; ++j) {
+            vec[j] = local_dis(local_gen);
+          }
+          // Each thread uses unique IDs: thread 0 -> 0-24, thread 1 -> 25-49, etc.
+          uint64_t id = static_cast<uint64_t>(t * 25 + i);
+          store.add(id, vec.data());
+          successful_writes++;
+        }
+      });
+    }
+
+    for (auto& t : writers) {
+      t.join();
+    }
+
+    REQUIRE(successful_writes == 100);
+    REQUIRE(store.size() == 100);
+  }
+
+  SECTION("Concurrent read-write is safe") {
+    // Pre-populate with some vectors
+    std::mt19937 gen(42);
+    std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
+
+    for (uint64_t i = 0; i < 50; ++i) {
+      std::vector<float> vec(dim);
+      for (size_t j = 0; j < dim; ++j) {
+        vec[j] = dis(gen);
+      }
+      store.add(i, vec.data());
+    }
+
+    std::atomic<bool> stop{false};
+    std::atomic<int> read_count{0};
+    std::atomic<int> write_count{0};
+
+    // Reader thread
+    std::thread reader([&]() {
+      std::mt19937 local_gen(std::random_device{}());
+      std::uniform_real_distribution<float> local_dis(-1.0f, 1.0f);
+
+      while (!stop) {
+        std::vector<float> query(dim);
+        for (size_t j = 0; j < dim; ++j) {
+          query[j] = local_dis(local_gen);
+        }
+        auto results = store.search(query.data(), 5);
+        read_count++;
+      }
+    });
+
+    // Writer thread
+    std::thread writer([&]() {
+      std::mt19937 local_gen(std::random_device{}());
+      std::uniform_real_distribution<float> local_dis(-1.0f, 1.0f);
+
+      for (uint64_t i = 50; i < 100; ++i) {
+        std::vector<float> vec(dim);
+        for (size_t j = 0; j < dim; ++j) {
+          vec[j] = local_dis(local_gen);
+        }
+        store.add(i, vec.data());
+        write_count++;
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+      }
+    });
+
+    writer.join();
+    stop = true;
+    reader.join();
+
+    REQUIRE(write_count == 50);
+    REQUIRE(read_count > 0);
+    REQUIRE(store.size() == 100);
   }
 }

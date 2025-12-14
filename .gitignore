@@ -34,6 +34,29 @@ Makefile
 *.log
 Testing/
 
+# Generated documentation (e.g., Doxygen)
+# docs/ folder is tracked for manual documentation
+
 # OS
 .DS_Store
 Thumbs.db
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# External dependencies (fetched separately)
+external/
+
+# Build artifacts
+build_py/
+build_cov/
+build_test/
+
+# Coverage artifacts
+*.gcda
+*.gcno
+*.gcov
+coverage.info
+lcov.info

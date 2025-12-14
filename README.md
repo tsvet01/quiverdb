@@ -1,84 +1,82 @@
-# quiverdb
+<div align="center">
 
-Embeddable vector database for edge AI. Lightning-fast semantic search that runs anywhere.
+# QuiverDB
+
+**Embeddable vector database for edge AI**
+
+[![Build](https://github.com/tsvet01/quiverdb/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/tsvet01/quiverdb/actions/workflows/build-and-test.yml)
+[![codecov](https://codecov.io/gh/tsvet01/quiverdb/branch/main/graph/badge.svg)](https://codecov.io/gh/tsvet01/quiverdb)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg)](https://en.cppreference.com/w/cpp/20)
+[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-3776AB.svg)](https://www.python.org/)
+
+</div>
+
+---
+
+Header-only C++20 vector database with SIMD acceleration. Runs on Linux, macOS, Windows, iOS, and Android.
+
+## Why QuiverDB?
+
+| Feature | QuiverDB | FAISS | hnswlib | Pinecone |
+|---------|----------|-------|---------|----------|
+| Header-only | Yes | No | No | N/A |
+| Mobile/Edge | Native | No | Partial | No |
+| Dependencies | Zero | Many | Few | Cloud |
+| Binary size | <100KB | 200MB+ | ~1MB | N/A |
+| GPU (Metal) | Yes | No | No | N/A |
+
+**Perfect for**: Mobile AI apps, Obsidian/Logseq plugins, edge devices, offline-first applications.
 
 ## Features
-- **Compact**: Header-only C++ library, runs on mobile/edge devices
-- **Fast**: SIMD-optimized distance calculations (ARM NEON, x86 AVX2)
-- **Multiple distance metrics**: L2, cosine similarity, dot product
-- **In-memory vector store**: Add, search, and manage vectors with k-NN search
-- **Cross-platform**: Linux, macOS, Windows, iOS, Android
-- **Local-first**: No network required, complete privacy
+
+- **SIMD-optimized**: ARM NEON, x86 AVX2 (~100ns for 768d vectors)
+- **Multiple indexes**: Brute-force, HNSW, Memory-mapped
+- **GPU acceleration**: Metal (Apple Silicon), CUDA (NVIDIA)
+- **Thread-safe**: Concurrent reads with `std::shared_mutex`
+- **Python bindings**: NumPy integration, GIL-safe
 
 ## Quick Start
 
-### Distance Calculations
-```cpp
-#include "core/distance.h"
-
-// 768-dimensional vectors (e.g., OpenAI embeddings)
-float vec_a[768] = {/* ... */};
-float vec_b[768] = {/* ... */};
-
-// L2 squared distance (auto-selects SIMD implementation)
-float l2_dist = quiverdb::l2_sq(vec_a, vec_b, 768);
-
-// Cosine distance (best for embeddings)
-float cos_dist = quiverdb::cosine_distance(vec_a, vec_b, 768);
-
-// Dot product (for maximum inner product search)
-float dot = quiverdb::dot_product(vec_a, vec_b, 768);
-```
-
-### Vector Store with k-NN Search
 ```cpp
 #include "core/vector_store.h"
 
-// Create a store for 768-dimensional vectors using cosine distance
 quiverdb::VectorStore store(768, quiverdb::DistanceMetric::COSINE);
-
-// Add vectors with unique IDs
-float doc1[768] = {/* ... */};
-float doc2[768] = {/* ... */};
-store.add(1, doc1);
-store.add(2, doc2);
-
-// Search for 5 nearest neighbors
-float query[768] = {/* ... */};
-auto results = store.search(query, 5);
-
-for (const auto& result : results) {
-    std::cout << "ID: " << result.id
-              << " Distance: " << result.distance << "\n";
-}
+store.add(1, embedding);
+auto results = store.search(query, 5);  // top-5 nearest neighbors
 ```
 
-## Building and Running
-Prerequisites
-- CMake 3.20+
-- C++20 compiler (Clang 17+ / GCC 11+ / MSVC 19.30+)
-- Git (for fetching dependencies)
+```cpp
+#include "core/hnsw_index.h"
+
+quiverdb::HNSWIndex index(768, quiverdb::HNSWDistanceMetric::COSINE, 100000);
+index.add(1, embedding);
+auto results = index.search(query, 5);
+index.save("index.bin");
+```
+
+```python
+import quiverdb_py as quiverdb
+import numpy as np
+
+index = quiverdb.HNSWIndex(768, quiverdb.HNSWDistanceMetric.COSINE)
+index.add(1, np.random.rand(768).astype(np.float32))
+ids, distances = index.search(query, 10)
+```
+
+## Build
 
 ```bash
-# Build
-mkdir -p build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . -j
-
-# Run tests
-./test_distance
-./test_vector_store
-
-# Run benchmarks
-./bench_distance --benchmark_min_time=0.1s
-./bench_vector_store --benchmark_min_time=0.1s
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
 ```
 
-## Performance
+## Documentation
 
-Benchmarks on x86_64 (Intel/AMD) with AVX2:
-- **Dot Product**: ~14-16 billion elements/second (768d)
-- **L2 Distance**: ~10-11 billion elements/second (768d)
-- **Cosine Distance**: ~7-8 billion elements/second (768d)
+- [Full API Guide](docs/GUIDE.md) - Detailed usage, Python bindings, mobile builds
+- [CHANGELOG](CHANGELOG.md) - Version history
 
-Performance scales linearly with vector dimensions and benefits from SIMD optimizations.
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.

@@ -1,0 +1,137 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "description": "Optimized release build",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "description": "Debug build with symbols",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "relwithdebinfo",
+      "displayName": "Release with Debug Info",
+      "description": "Optimized build with debug symbols",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "dev",
+      "displayName": "Development",
+      "description": "Development build with all targets",
+      "inherits": "debug",
+      "cacheVariables": {
+        "QUIVERDB_BUILD_TESTS": "ON",
+        "QUIVERDB_BUILD_BENCHMARKS": "ON",
+        "QUIVERDB_BUILD_EXAMPLES": "ON",
+        "QUIVERDB_BUILD_PYTHON": "ON"
+      }
+    },
+    {
+      "name": "python-only",
+      "displayName": "Python Bindings Only",
+      "description": "Build only Python bindings",
+      "inherits": "release",
+      "cacheVariables": {
+        "QUIVERDB_BUILD_TESTS": "OFF",
+        "QUIVERDB_BUILD_BENCHMARKS": "OFF",
+        "QUIVERDB_BUILD_EXAMPLES": "OFF",
+        "QUIVERDB_BUILD_PYTHON": "ON"
+      }
+    },
+    {
+      "name": "asan",
+      "displayName": "AddressSanitizer",
+      "description": "Debug build with AddressSanitizer",
+      "inherits": "debug",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fsanitize=address -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address",
+        "QUIVERDB_BUILD_PYTHON": "OFF"
+      }
+    },
+    {
+      "name": "ubsan",
+      "displayName": "UndefinedBehaviorSanitizer",
+      "description": "Debug build with UBSan",
+      "inherits": "debug",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fsanitize=undefined -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=undefined",
+        "QUIVERDB_BUILD_PYTHON": "OFF"
+      }
+    },
+    {
+      "name": "coverage",
+      "displayName": "Code Coverage",
+      "description": "Debug build with coverage instrumentation",
+      "inherits": "debug",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "--coverage -fprofile-arcs -ftest-coverage",
+        "CMAKE_EXE_LINKER_FLAGS": "--coverage",
+        "QUIVERDB_BUILD_PYTHON": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug"
+    },
+    {
+      "name": "dev",
+      "configurePreset": "dev"
+    },
+    {
+      "name": "python-only",
+      "configurePreset": "python-only"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "configurePreset": "dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "verbose",
+      "configurePreset": "dev",
+      "output": {
+        "verbosity": "verbose",
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

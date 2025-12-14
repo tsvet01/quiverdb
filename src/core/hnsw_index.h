@@ -183,7 +183,7 @@ public:
       }
     }
 
-    auto top = search_layer(query, curr, std::max(ef_search_, k), 0);
+    auto top = search_layer(query, curr, std::max(ef_search_.load(std::memory_order_relaxed), k), 0);
     std::vector<std::pair<float, size_t>> temp;
     while (!top.empty()) { temp.push_back(top.top()); top.pop(); }
     std::sort(temp.begin(), temp.end());
@@ -197,9 +197,9 @@ public:
 
   void set_ef_search(size_t ef) {
     if (ef == 0) throw std::invalid_argument("ef_search must be > 0");
-    ef_search_ = ef;
+    ef_search_.store(ef, std::memory_order_relaxed);
   }
-  size_t get_ef_search() const { return ef_search_; }
+  size_t get_ef_search() const { return ef_search_.load(std::memory_order_relaxed); }
   size_t size() const { std::shared_lock lk(global_mtx_); return count_; }
   size_t dimension() const { return dim_; }
   size_t capacity() const { return max_elements_; }
@@ -226,7 +226,7 @@ public:
       detail::write_bin(f, max_elements_);
       detail::write_bin(f, M_);
       detail::write_bin(f, ef_construction_);
-      detail::write_bin(f, ef_search_);
+      detail::write_bin(f, ef_search_.load());
       detail::write_bin(f, mult_);
       detail::write_bin(f, count_.load());
       detail::write_bin(f, ep_.load());
@@ -278,6 +278,7 @@ public:
     size_t dim, max_el, M, ef_con, ef_s; uint32_t met; double mult;
     detail::read_bin(f, dim);
     detail::read_bin(f, met);
+    if (met > 2) throw std::runtime_error("Corrupted file: invalid metric");
     detail::read_bin(f, max_el);
     detail::read_bin(f, M);
     detail::read_bin(f, ef_con);
@@ -285,7 +286,7 @@ public:
     detail::read_bin(f, mult);
 
     auto idx = std::make_unique<HNSWIndex>(dim, static_cast<HNSWDistanceMetric>(met), max_el, M, ef_con);
-    idx->ef_search_ = ef_s;
+    idx->ef_search_.store(ef_s);
     idx->mult_ = mult;
 
     size_t cnt, ep_val;
@@ -448,7 +449,8 @@ private:
 
   size_t dim_;
   HNSWDistanceMetric metric_;
-  size_t max_elements_, M_, M_max_, M_max0_, ef_construction_, ef_search_;
+  size_t max_elements_, M_, M_max_, M_max0_, ef_construction_;
+  std::atomic<size_t> ef_search_;  // Atomic for thread-safe reads during search
   double mult_;
   std::mt19937 level_gen_;
   std::vector<float> vectors_;

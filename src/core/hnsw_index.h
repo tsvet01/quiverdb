@@ -88,9 +88,12 @@ public:
     for (size_t i = 0; i < max_elements; ++i) locks_.push_back(std::make_unique<std::shared_mutex>());
   }
 
+  // Thread-safety: global_mtx_ serializes ALL add() calls. Per-node locks_ are for
+  // reader-writer sync between add() and concurrent search() calls only.
+  // This design prevents ABBA deadlocks since only one add() runs at a time.
   void add(uint64_t id, const float* vec) {
     if (!vec) throw std::invalid_argument("Vector must not be null");
-    std::unique_lock glock(global_mtx_);
+    std::unique_lock glock(global_mtx_);  // Exclusive: only one add() at a time
     if (id_map_.count(id)) throw std::invalid_argument("ID " + std::to_string(id) + " exists");
     if (count_ >= max_elements_) throw std::runtime_error("Index full");
 
@@ -127,11 +130,12 @@ public:
     for (int l = std::min(level, cur_max_level); l >= 0; --l) {
       auto top = search_layer(vec, curr, ef_construction_, l);
       auto sel = select_neighbors(top, M_, l);
+      // Narrow scope: lock iid, assign, unlock BEFORE iterating neighbors (no ABBA possible)
       { std::unique_lock lk(*locks_[iid]); neighbors_[iid][l] = std::move(sel); }
 
       size_t max_conn = l == 0 ? M_max0_ : M_max_;
       for (size_t nid : neighbors_[iid][l]) {
-        std::unique_lock lk(*locks_[nid]);
+        std::unique_lock lk(*locks_[nid]);  // Only one lock held at a time
         auto& nc = neighbors_[nid][l];
         if (nc.size() < max_conn) { nc.push_back(iid); }
         else {
@@ -245,14 +249,16 @@ public:
       f.write(rng_state.data(), rng_state.size());
       f.flush();
       if (!f) { std::filesystem::remove(tmp); throw std::runtime_error("Write failed: " + tmp); }
+      // IMPORTANT: Close ofstream BEFORE reopening for fsync. On Windows, CreateFileA
+      // fails if the file is still open by ofstream (exclusive lock). This order is correct.
       f.close();
 #if defined(_WIN32) || defined(_WIN64)
-      // FlushFileBuffers for durability before atomic rename
+      // Reopen and flush to disk for durability before atomic rename
       HANDLE hFile = CreateFileA(tmp.c_str(), GENERIC_WRITE, FILE_SHARE_READ, NULL,
                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
       if (hFile != INVALID_HANDLE_VALUE) { FlushFileBuffers(hFile); CloseHandle(hFile); }
 #elif defined(__unix__) || defined(__APPLE__)
-      // fsync for durability before atomic rename
+      // Reopen and fsync for durability before atomic rename
       int fd = open(tmp.c_str(), O_WRONLY);
       if (fd >= 0) { fsync(fd); close(fd); }
 #endif

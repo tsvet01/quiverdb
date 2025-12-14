@@ -237,14 +237,16 @@ public:
     f.write(reinterpret_cast<const char*>(vectors_.data()), vectors_.size() * sizeof(float));
     f.flush();
     if (!f) { std::remove(tmp.c_str()); throw std::runtime_error("Write failed"); }
+    // IMPORTANT: Close ofstream BEFORE reopening for fsync. On Windows, CreateFileA
+    // fails if the file is still open by ofstream (exclusive lock). This order is correct.
     f.close();
 #ifdef QUIVERDB_WINDOWS
-    // FlushFileBuffers for durability before atomic rename
+    // Reopen and flush to disk for durability before atomic rename
     HANDLE hFile = CreateFileA(tmp.c_str(), GENERIC_WRITE, FILE_SHARE_READ, NULL,
                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile != INVALID_HANDLE_VALUE) { FlushFileBuffers(hFile); CloseHandle(hFile); }
 #else
-    // fsync for durability before atomic rename
+    // Reopen and fsync for durability before atomic rename
     int fd = open(tmp.c_str(), O_WRONLY);
     if (fd >= 0) { fsync(fd); close(fd); }
 #endif

@@ -61,6 +61,15 @@ public:
     return it == id_to_index_.end() ? nullptr : vectors_data_.data() + it->second * dim_;
   }
 
+  // Thread-safe: returns a copy of the vector (safe for concurrent access)
+  std::vector<float> get_copy(uint64_t id) const {
+    std::shared_lock lock(mutex_);
+    auto it = id_to_index_.find(id);
+    if (it == id_to_index_.end()) return {};
+    const float* ptr = vectors_data_.data() + it->second * dim_;
+    return std::vector<float>(ptr, ptr + dim_);
+  }
+
   std::vector<SearchResult> search(const float* query, size_t k) const {
     if (!query) throw std::invalid_argument("Query must not be null");
     if (k == 0) throw std::invalid_argument("k must be > 0");

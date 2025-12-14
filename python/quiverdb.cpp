@@ -142,12 +142,13 @@ PYBIND11_MODULE(quiverdb_py, m) {
             py::arg("id"), py::arg("vector"),
             "Adds a vector to the store")
         .def("get", [](const VectorStore& self, uint64_t id) -> py::object {
-                const float* ptr = self.get(id);
-                if (ptr == nullptr) {
+                // Use get_copy() for thread-safe copy while holding the lock
+                std::vector<float> vec = self.get_copy(id);
+                if (vec.empty()) {
                     return py::none();
                 }
-                // Create a copy to ensure memory safety - internal storage may reallocate
-                auto* vec_copy = new std::vector<float>(ptr, ptr + self.dimension());
+                // Move the copy into heap-allocated storage for the capsule
+                auto* vec_copy = new std::vector<float>(std::move(vec));
                 auto capsule = py::capsule(vec_copy, [](void* p) {
                     delete static_cast<std::vector<float>*>(p);
                 });

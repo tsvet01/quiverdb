@@ -237,7 +237,12 @@ public:
     f.write(reinterpret_cast<const char*>(vectors_.data()), vectors_.size() * sizeof(float));
     f.flush();
     if (!f) { std::remove(tmp.c_str()); throw std::runtime_error("Write failed"); }
-#ifdef QUIVERDB_POSIX
+#ifdef QUIVERDB_WINDOWS
+    // FlushFileBuffers for durability before atomic rename
+    HANDLE hFile = CreateFileA(tmp.c_str(), GENERIC_WRITE, 0, NULL,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile != INVALID_HANDLE_VALUE) { FlushFileBuffers(hFile); CloseHandle(hFile); }
+#else
     // fsync for durability before atomic rename
     int fd = open(tmp.c_str(), O_RDONLY);
     if (fd >= 0) { fsync(fd); close(fd); }

@@ -19,7 +19,12 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#if defined(__unix__) || defined(__APPLE__)
+#if defined(_WIN32) || defined(_WIN64)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#elif defined(__unix__) || defined(__APPLE__)
 #include <fcntl.h>
 #include <unistd.h>
 #endif
@@ -240,7 +245,12 @@ public:
       f.write(rng_state.data(), rng_state.size());
       f.flush();
       if (!f) { std::filesystem::remove(tmp); throw std::runtime_error("Write failed: " + tmp); }
-#if defined(__unix__) || defined(__APPLE__)
+#if defined(_WIN32) || defined(_WIN64)
+      // FlushFileBuffers for durability before atomic rename
+      HANDLE hFile = CreateFileA(tmp.c_str(), GENERIC_WRITE, 0, NULL,
+                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+      if (hFile != INVALID_HANDLE_VALUE) { FlushFileBuffers(hFile); CloseHandle(hFile); }
+#elif defined(__unix__) || defined(__APPLE__)
       // fsync for durability before atomic rename
       int fd = open(tmp.c_str(), O_RDONLY);
       if (fd >= 0) { fsync(fd); close(fd); }

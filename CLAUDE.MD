@@ -3,7 +3,7 @@
 ## Overview
 Embeddable vector database for edge AI. Header-only C++20, SIMD-optimized, cross-platform.
 
-## Current Status: v0.1.0
+## Current Status: v0.1.0 (in development)
 
 ### Features
 | Feature | Status |

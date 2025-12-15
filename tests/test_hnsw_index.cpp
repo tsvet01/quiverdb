@@ -732,6 +732,55 @@ TEST_CASE("HNSWIndex - corrupted RNG state", "[hnsw][serialization]") {
   std::filesystem::remove(filename);
 }
 
+TEST_CASE("HNSWIndex - corruption validation tests", "[hnsw][serialization]") {
+  SECTION("Loading file with invalid metric throws") {
+    const std::string filename = "test_hnsw_bad_metric.bin";
+    {
+      std::ofstream ofs(filename, std::ios::binary);
+      uint32_t magic = quiverdb::HNSWIndex::MAGIC;
+      uint32_t version = quiverdb::HNSWIndex::VERSION;
+      size_t dim = 8;
+      uint32_t bad_metric = 99; // Invalid metric
+      ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+      ofs.write(reinterpret_cast<const char*>(&version), sizeof(version));
+      ofs.write(reinterpret_cast<const char*>(&dim), sizeof(dim));
+      ofs.write(reinterpret_cast<const char*>(&bad_metric), sizeof(bad_metric));
+    }
+    REQUIRE_THROWS_AS(quiverdb::HNSWIndex::load(filename), std::runtime_error);
+    std::filesystem::remove(filename);
+  }
+
+  SECTION("Loading file with count exceeding max_elements throws") {
+    const std::string filename = "test_hnsw_bad_count.bin";
+    {
+      std::ofstream ofs(filename, std::ios::binary);
+      uint32_t magic = quiverdb::HNSWIndex::MAGIC;
+      uint32_t version = quiverdb::HNSWIndex::VERSION;
+      size_t dim = 8;
+      uint32_t metric = 0;
+      size_t max_el = 10;  // max_elements = 10
+      size_t M = 16;
+      size_t ef_con = 200;
+      size_t ef_s = 50;
+      double mult = 0.5;
+      size_t cnt = 100;  // count > max_elements (invalid)
+      ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+      ofs.write(reinterpret_cast<const char*>(&version), sizeof(version));
+      ofs.write(reinterpret_cast<const char*>(&dim), sizeof(dim));
+      ofs.write(reinterpret_cast<const char*>(&metric), sizeof(metric));
+      ofs.write(reinterpret_cast<const char*>(&max_el), sizeof(max_el));
+      ofs.write(reinterpret_cast<const char*>(&M), sizeof(M));
+      ofs.write(reinterpret_cast<const char*>(&ef_con), sizeof(ef_con));
+      ofs.write(reinterpret_cast<const char*>(&ef_s), sizeof(ef_s));
+      ofs.write(reinterpret_cast<const char*>(&mult), sizeof(mult));
+      ofs.write(reinterpret_cast<const char*>(&cnt), sizeof(cnt));
+    }
+    REQUIRE_THROWS_AS(quiverdb::HNSWIndex::load(filename), std::runtime_error);
+    std::filesystem::remove(filename);
+  }
+
+}
+
 TEST_CASE("HNSWIndex - contains edge cases", "[hnsw]") {
   constexpr size_t dim = 8;
   quiverdb::HNSWIndex index(dim, quiverdb::HNSWDistanceMetric::L2, 100);

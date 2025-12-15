@@ -84,11 +84,14 @@ public:
     if (num_vectors_ > SIZE_MAX / sizeof(uint64_t)) {
       cleanup(); throw std::runtime_error("File corrupted: size overflow");
     }
+    if (dim_ == 0 && num_vectors_ > 0) {
+      cleanup(); throw std::runtime_error("File corrupted: zero dimension with vectors");
+    }
     if (dim_ > SIZE_MAX / sizeof(float)) {
       cleanup(); throw std::runtime_error("File corrupted: size overflow");
     }
     size_t vec_bytes_per = dim_ * sizeof(float);  // Safe due to check above
-    if (num_vectors_ > 0 && num_vectors_ > SIZE_MAX / vec_bytes_per) {
+    if (vec_bytes_per > 0 && num_vectors_ > SIZE_MAX / vec_bytes_per) {
       cleanup(); throw std::runtime_error("File corrupted: size overflow");
     }
     size_t ids_size = num_vectors_ * sizeof(uint64_t);

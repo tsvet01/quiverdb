@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - 2025-12-07
+### Added
+- Comprehensive corruption detection tests for file format validation
+  - Invalid magic number, version, metric detection
+  - Size overflow protection tests (SIZE_MAX scenarios)
+  - Truncated file handling tests
+  - Input validation tests (null pointers, invalid parameters)
+  - Zero dimension with vectors detection test
+  - Combined dim*num_vectors overflow test
+
+### Fixed
+- Windows file locking issue in mmap tests (scope store before file removal)
+- Type consistency in test file format (uint64_t for dimension field)
+- Coverage reporting now excludes test and benchmark files (measures only production code)
+- Division by zero in MMapVectorStore when loading corrupted file with dim=0
+
+## [0.1.0] - Unreleased
 
 ### Added
 - Core distance functions with SIMD optimization (ARM NEON, x86 AVX2)
@@ -27,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Python bindings via pybind11
   - NumPy array support
   - All index types and distance metrics
-- Comprehensive test suite (36 C++ tests, 28 Python tests)
+- Comprehensive test suite (38 C++ tests, 28 Python tests)
 - Google Benchmark performance tests
 - Multi-platform CI/CD (Linux, macOS, Windows, iOS, Android)
   - GCC, Clang, MSVC compilers

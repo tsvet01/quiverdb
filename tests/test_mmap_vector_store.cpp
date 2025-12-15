@@ -166,7 +166,7 @@ TEST_CASE("MMapVectorStore - error handling", "[mmap]") {
       std::ofstream ofs(filename, std::ios::binary);
       uint32_t magic = quiverdb::MMapVectorStore::MAGIC;
       uint32_t version = 1;
-      uint32_t dim = 3;
+      uint64_t dim = 3;  // Fixed: was uint32_t, should be uint64_t per file format
       uint64_t num_vectors = 0;
       uint32_t bad_metric = 999; // Invalid metric value
       ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
@@ -178,6 +178,168 @@ TEST_CASE("MMapVectorStore - error handling", "[mmap]") {
     REQUIRE_THROWS_AS(quiverdb::MMapVectorStore(filename), std::runtime_error);
     std::filesystem::remove(filename);
   }
+
+  SECTION("Unsupported version throws") {
+    const std::string filename = "test_bad_version.bin";
+    {
+      std::ofstream ofs(filename, std::ios::binary);
+      uint32_t magic = quiverdb::MMapVectorStore::MAGIC;
+      uint32_t version = 99; // Unsupported version
+      uint64_t dim = 3;
+      uint64_t num_vectors = 0;
+      uint32_t metric = 0;
+      uint32_t reserved = 0;
+      ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+      ofs.write(reinterpret_cast<const char*>(&version), sizeof(version));
+      ofs.write(reinterpret_cast<const char*>(&dim), sizeof(dim));
+      ofs.write(reinterpret_cast<const char*>(&num_vectors), sizeof(num_vectors));
+      ofs.write(reinterpret_cast<const char*>(&metric), sizeof(metric));
+      ofs.write(reinterpret_cast<const char*>(&reserved), sizeof(reserved));
+    }
+    REQUIRE_THROWS_AS(quiverdb::MMapVectorStore(filename), std::runtime_error);
+    std::filesystem::remove(filename);
+  }
+
+  SECTION("Zero dimension with vectors throws") {
+    // Prevents division by zero in overflow check (dim=0 makes vec_bytes_per=0)
+    const std::string filename = "test_zero_dim.bin";
+    {
+      std::ofstream ofs(filename, std::ios::binary);
+      uint32_t magic = quiverdb::MMapVectorStore::MAGIC;
+      uint32_t version = 1;
+      uint64_t dim = 0; // Zero dimension
+      uint64_t num_vectors = 1; // Non-zero vectors
+      uint32_t metric = 0;
+      uint32_t reserved = 0;
+      ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+      ofs.write(reinterpret_cast<const char*>(&version), sizeof(version));
+      ofs.write(reinterpret_cast<const char*>(&dim), sizeof(dim));
+      ofs.write(reinterpret_cast<const char*>(&num_vectors), sizeof(num_vectors));
+      ofs.write(reinterpret_cast<const char*>(&metric), sizeof(metric));
+      ofs.write(reinterpret_cast<const char*>(&reserved), sizeof(reserved));
+    }
+    REQUIRE_THROWS_AS(quiverdb::MMapVectorStore(filename), std::runtime_error);
+    std::filesystem::remove(filename);
+  }
+
+  SECTION("File truncated mid-data throws") {
+    const std::string filename = "test_truncated_data.bin";
+    {
+      std::ofstream ofs(filename, std::ios::binary);
+      uint32_t magic = quiverdb::MMapVectorStore::MAGIC;
+      uint32_t version = 1;
+      uint64_t dim = 4;
+      uint64_t num_vectors = 10; // Claims 10 vectors but won't provide them
+      uint32_t metric = 0;
+      uint32_t reserved = 0;
+      ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+      ofs.write(reinterpret_cast<const char*>(&version), sizeof(version));
+      ofs.write(reinterpret_cast<const char*>(&dim), sizeof(dim));
+      ofs.write(reinterpret_cast<const char*>(&num_vectors), sizeof(num_vectors));
+      ofs.write(reinterpret_cast<const char*>(&metric), sizeof(metric));
+      ofs.write(reinterpret_cast<const char*>(&reserved), sizeof(reserved));
+      // Write only one ID and one vector (should have 10)
+      uint64_t id = 1;
+      float vec[4] = {1.0f, 2.0f, 3.0f, 4.0f};
+      ofs.write(reinterpret_cast<const char*>(&id), sizeof(id));
+      ofs.write(reinterpret_cast<const char*>(vec), sizeof(vec));
+    }
+    REQUIRE_THROWS_AS(quiverdb::MMapVectorStore(filename), std::runtime_error);
+    std::filesystem::remove(filename);
+  }
+
+  SECTION("Size overflow - huge num_vectors throws") {
+    const std::string filename = "test_overflow_num.bin";
+    {
+      std::ofstream ofs(filename, std::ios::binary);
+      uint32_t magic = quiverdb::MMapVectorStore::MAGIC;
+      uint32_t version = 1;
+      uint64_t dim = 4;
+      uint64_t num_vectors = SIZE_MAX; // Causes overflow
+      uint32_t metric = 0;
+      uint32_t reserved = 0;
+      ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+      ofs.write(reinterpret_cast<const char*>(&version), sizeof(version));
+      ofs.write(reinterpret_cast<const char*>(&dim), sizeof(dim));
+      ofs.write(reinterpret_cast<const char*>(&num_vectors), sizeof(num_vectors));
+      ofs.write(reinterpret_cast<const char*>(&metric), sizeof(metric));
+      ofs.write(reinterpret_cast<const char*>(&reserved), sizeof(reserved));
+    }
+    REQUIRE_THROWS_AS(quiverdb::MMapVectorStore(filename), std::runtime_error);
+    std::filesystem::remove(filename);
+  }
+
+  SECTION("Size overflow - huge dimension throws") {
+    const std::string filename = "test_overflow_dim.bin";
+    {
+      std::ofstream ofs(filename, std::ios::binary);
+      uint32_t magic = quiverdb::MMapVectorStore::MAGIC;
+      uint32_t version = 1;
+      uint64_t dim = SIZE_MAX; // Causes overflow
+      uint64_t num_vectors = 1;
+      uint32_t metric = 0;
+      uint32_t reserved = 0;
+      ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+      ofs.write(reinterpret_cast<const char*>(&version), sizeof(version));
+      ofs.write(reinterpret_cast<const char*>(&dim), sizeof(dim));
+      ofs.write(reinterpret_cast<const char*>(&num_vectors), sizeof(num_vectors));
+      ofs.write(reinterpret_cast<const char*>(&metric), sizeof(metric));
+      ofs.write(reinterpret_cast<const char*>(&reserved), sizeof(reserved));
+    }
+    REQUIRE_THROWS_AS(quiverdb::MMapVectorStore(filename), std::runtime_error);
+    std::filesystem::remove(filename);
+  }
+
+  SECTION("Size overflow - combined dim*num_vectors overflow throws") {
+    // Test the combined overflow check: num_vectors * dim * sizeof(float) overflows
+    // even though each value individually passes earlier checks
+    const std::string filename = "test_overflow_combined.bin";
+    {
+      std::ofstream ofs(filename, std::ios::binary);
+      uint32_t magic = quiverdb::MMapVectorStore::MAGIC;
+      uint32_t version = 1;
+      // dim = SIZE_MAX/8 passes dim check (< SIZE_MAX/sizeof(float))
+      // num_vectors = 3 passes num_vectors check (< SIZE_MAX/sizeof(uint64_t))
+      // But dim * sizeof(float) * num_vectors = (SIZE_MAX/2) * 3 overflows
+      uint64_t dim = SIZE_MAX / 8;
+      uint64_t num_vectors = 3;
+      uint32_t metric = 0;
+      uint32_t reserved = 0;
+      ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+      ofs.write(reinterpret_cast<const char*>(&version), sizeof(version));
+      ofs.write(reinterpret_cast<const char*>(&dim), sizeof(dim));
+      ofs.write(reinterpret_cast<const char*>(&num_vectors), sizeof(num_vectors));
+      ofs.write(reinterpret_cast<const char*>(&metric), sizeof(metric));
+      ofs.write(reinterpret_cast<const char*>(&reserved), sizeof(reserved));
+    }
+    REQUIRE_THROWS_AS(quiverdb::MMapVectorStore(filename), std::runtime_error);
+    std::filesystem::remove(filename);
+  }
+}
+
+TEST_CASE("MMapVectorStore - search validation", "[mmap]") {
+  const std::string filename = "test_mmap_search_validation.bin";
+  std::filesystem::remove(filename);
+
+  quiverdb::MMapVectorStoreBuilder builder(4, quiverdb::DistanceMetric::L2);
+  float vec[] = {1.0f, 0.0f, 0.0f, 0.0f};
+  builder.add(1, vec);
+  builder.save(filename);
+
+  {
+    quiverdb::MMapVectorStore store(filename);
+
+    SECTION("Search with null query throws") {
+      REQUIRE_THROWS_AS(store.search(nullptr, 1), std::invalid_argument);
+    }
+
+    SECTION("Search with k=0 throws") {
+      float query[] = {1.0f, 0.0f, 0.0f, 0.0f};
+      REQUIRE_THROWS_AS(store.search(query, 0), std::invalid_argument);
+    }
+  }  // Scope ensures store is destroyed and file unmapped before removal (Windows file locking)
+
+  std::filesystem::remove(filename);
 }
 
 TEST_CASE("MMapVectorStore - large scale", "[mmap][stress]") {
@@ -261,7 +423,7 @@ TEST_CASE("MMapVectorStore - cosine metric", "[mmap]") {
     REQUIRE((results[0].id == 1 || results[0].id == 2));
     REQUIRE((results[1].id == 1 || results[1].id == 2));
     REQUIRE(results[0].distance == Approx(0.0f).margin(1e-5f));
-  }  // store destructor unmaps file before removal
+  }  // Scope ensures store is destroyed and file unmapped before removal (Windows file locking)
 
   std::filesystem::remove(filename);
 }
@@ -290,7 +452,7 @@ TEST_CASE("MMapVectorStore - dot product metric", "[mmap]") {
     // vec2 should be first (highest dot product = smallest negative distance)
     REQUIRE(results.size() == 1);
     REQUIRE(results[0].id == 2);
-  }  // store destructor unmaps file before removal
+  }  // Scope ensures store is destroyed and file unmapped before removal (Windows file locking)
 
   std::filesystem::remove(filename);
 }

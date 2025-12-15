@@ -200,6 +200,28 @@ TEST_CASE("MMapVectorStore - error handling", "[mmap]") {
     std::filesystem::remove(filename);
   }
 
+  SECTION("Zero dimension with vectors throws") {
+    // Prevents division by zero in overflow check (dim=0 makes vec_bytes_per=0)
+    const std::string filename = "test_zero_dim.bin";
+    {
+      std::ofstream ofs(filename, std::ios::binary);
+      uint32_t magic = quiverdb::MMapVectorStore::MAGIC;
+      uint32_t version = 1;
+      uint64_t dim = 0; // Zero dimension
+      uint64_t num_vectors = 1; // Non-zero vectors
+      uint32_t metric = 0;
+      uint32_t reserved = 0;
+      ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+      ofs.write(reinterpret_cast<const char*>(&version), sizeof(version));
+      ofs.write(reinterpret_cast<const char*>(&dim), sizeof(dim));
+      ofs.write(reinterpret_cast<const char*>(&num_vectors), sizeof(num_vectors));
+      ofs.write(reinterpret_cast<const char*>(&metric), sizeof(metric));
+      ofs.write(reinterpret_cast<const char*>(&reserved), sizeof(reserved));
+    }
+    REQUIRE_THROWS_AS(quiverdb::MMapVectorStore(filename), std::runtime_error);
+    std::filesystem::remove(filename);
+  }
+
   SECTION("File truncated mid-data throws") {
     const std::string filename = "test_truncated_data.bin";
     {
@@ -401,7 +423,7 @@ TEST_CASE("MMapVectorStore - cosine metric", "[mmap]") {
     REQUIRE((results[0].id == 1 || results[0].id == 2));
     REQUIRE((results[1].id == 1 || results[1].id == 2));
     REQUIRE(results[0].distance == Approx(0.0f).margin(1e-5f));
-  }  // store destructor unmaps file before removal
+  }  // Scope ensures store is destroyed and file unmapped before removal (Windows file locking)
 
   std::filesystem::remove(filename);
 }
@@ -430,7 +452,7 @@ TEST_CASE("MMapVectorStore - dot product metric", "[mmap]") {
     // vec2 should be first (highest dot product = smallest negative distance)
     REQUIRE(results.size() == 1);
     REQUIRE(results[0].id == 2);
-  }  // store destructor unmaps file before removal
+  }  // Scope ensures store is destroyed and file unmapped before removal (Windows file locking)
 
   std::filesystem::remove(filename);
 }

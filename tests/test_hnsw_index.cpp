@@ -732,7 +732,7 @@ TEST_CASE("HNSWIndex - corrupted RNG state", "[hnsw][serialization]") {
   std::filesystem::remove(filename);
 }
 
-TEST_CASE("HNSWIndex - additional corruption tests", "[hnsw][serialization]") {
+TEST_CASE("HNSWIndex - corruption validation tests", "[hnsw][serialization]") {
   SECTION("Loading file with invalid metric throws") {
     const std::string filename = "test_hnsw_bad_metric.bin";
     {

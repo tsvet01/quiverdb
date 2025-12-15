@@ -13,11 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Size overflow protection tests (SIZE_MAX scenarios)
   - Truncated file handling tests
   - Input validation tests (null pointers, invalid parameters)
+  - Zero dimension with vectors detection test
+  - Combined dim*num_vectors overflow test
 
 ### Fixed
 - Windows file locking issue in mmap tests (scope store before file removal)
 - Type consistency in test file format (uint64_t for dimension field)
 - Coverage reporting now excludes test and benchmark files (measures only production code)
+- Division by zero in MMapVectorStore when loading corrupted file with dim=0
 
 ## [0.1.0] - 2025-12-07
 
